@@ -211,3 +211,43 @@ describe("POST /api/auth/refresh", () => {
     expect(res.status).toBe(401);
   });
 });
+
+describe("registration input validation", () => {
+  it("rejects a malformed email", async () => {
+    const res = await request(app)
+      .post("/api/auth/register")
+      .send({ ...VALID_USER, email: "not-an-email" });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/email/i);
+  });
+
+  it("rejects a password under 8 characters", async () => {
+    const res = await request(app)
+      .post("/api/auth/register")
+      .send({ ...VALID_USER, password: "short" });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/8 characters/);
+  });
+});
+
+describe("refresh token hygiene", () => {
+  it("does not accumulate a new token on every login", async () => {
+    await request(app).post("/api/auth/register").send(VALID_USER);
+
+    const credentials = {
+      email: VALID_USER.email,
+      password: VALID_USER.password,
+    };
+
+    for (let i = 0; i < 12; i += 1) {
+      await request(app).post("/api/auth/login").send(credentials);
+    }
+
+    const user = await User.findOne({ email: VALID_USER.email });
+
+    // Capped at MAX_REFRESH_TOKENS rather than growing to 12.
+    expect(user.refreshTokens.length).toBeLessThanOrEqual(10);
+  });
+});

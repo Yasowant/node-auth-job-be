@@ -7,6 +7,8 @@ const {
   getAllJobs,
   getJobById,
   getMyJobs,
+  updateJob,
+  deleteJob,
 } = require("../controllers/jobController");
 
 const router = express.Router();
@@ -17,5 +19,8 @@ router.get("/my/jobs", authMiddleware, authorizeRoles("RECRUITER"), getMyJobs);
 router.post("/", authMiddleware, authorizeRoles("RECRUITER"), createJob);
 router.get("/", getAllJobs);
 router.get("/:id", getJobById);
+
+router.put("/:id", authMiddleware, authorizeRoles("RECRUITER"), updateJob);
+router.delete("/:id", authMiddleware, authorizeRoles("RECRUITER"), deleteJob);
 
 module.exports = router;

@@ -171,3 +171,118 @@ describe("GET /api/jobs/my/jobs", () => {
     expect(res.body.count).toBe(1);
   });
 });
+
+/** A second recruiter, so ownership checks can be exercised. */
+const loginAsOtherRecruiter = async () => {
+  const other = {
+    name: "Recruiter Two",
+    email: "other@example.com",
+    password: "Str0ngPassw0rd!",
+    workStatus: "EXPERIENCED",
+  };
+
+  await request(app).post("/api/auth/register").send(other);
+  await User.updateOne({ email: other.email }, { role: "RECRUITER" });
+
+  const res = await request(app)
+    .post("/api/auth/login")
+    .send({ email: other.email, password: other.password });
+
+  const cookies = res.headers["set-cookie"];
+
+  await request(app)
+    .post("/api/company")
+    .set("Cookie", cookies)
+    .send({ name: "Other Studio", slug: "other-studio" });
+
+  return cookies;
+};
+
+const createJob = (cookies, overrides = {}) =>
+  request(app)
+    .post("/api/jobs")
+    .set("Cookie", cookies)
+    .send({ title: "Backend Engineer", description: "Build APIs", ...overrides });
+
+describe("PUT /api/jobs/:id", () => {
+  it("lets the owner update their job", async () => {
+    const cookies = await loginAsRecruiter();
+    await createCompany(cookies);
+
+    const created = await createJob(cookies);
+
+    const res = await request(app)
+      .put(`/api/jobs/${created.body.job._id}`)
+      .set("Cookie", cookies)
+      .send({ title: "Senior Backend Engineer" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.job.title).toBe("Senior Backend Engineer");
+  });
+
+  it("stamps publishedAt the first time a job goes ACTIVE", async () => {
+    const cookies = await loginAsRecruiter();
+    await createCompany(cookies);
+
+    const created = await createJob(cookies);
+    expect(created.body.job.publishedAt).toBeNull();
+
+    const res = await request(app)
+      .put(`/api/jobs/${created.body.job._id}`)
+      .set("Cookie", cookies)
+      .send({ status: "ACTIVE" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.job.publishedAt).not.toBeNull();
+  });
+
+  it("refuses to let a recruiter edit someone else's job", async () => {
+    const owner = await loginAsRecruiter();
+    await createCompany(owner);
+
+    const created = await createJob(owner);
+
+    const intruder = await loginAsOtherRecruiter();
+
+    const res = await request(app)
+      .put(`/api/jobs/${created.body.job._id}`)
+      .set("Cookie", intruder)
+      .send({ title: "Hijacked" });
+
+    expect(res.status).toBe(403);
+  });
+});
+
+describe("DELETE /api/jobs/:id", () => {
+  it("lets the owner delete their job", async () => {
+    const cookies = await loginAsRecruiter();
+    await createCompany(cookies);
+
+    const created = await createJob(cookies);
+    const id = created.body.job._id;
+
+    const res = await request(app)
+      .delete(`/api/jobs/${id}`)
+      .set("Cookie", cookies);
+
+    expect(res.status).toBe(200);
+
+    const after = await request(app).get(`/api/jobs/${id}`);
+    expect(after.status).toBe(404);
+  });
+
+  it("refuses to let a recruiter delete someone else's job", async () => {
+    const owner = await loginAsRecruiter();
+    await createCompany(owner);
+
+    const created = await createJob(owner);
+
+    const intruder = await loginAsOtherRecruiter();
+
+    const res = await request(app)
+      .delete(`/api/jobs/${created.body.job._id}`)
+      .set("Cookie", intruder);
+
+    expect(res.status).toBe(403);
+  });
+});

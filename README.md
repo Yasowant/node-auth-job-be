@@ -172,6 +172,8 @@ Base URL: `/api`. All responses are JSON. Authenticated routes read the `accessT
 | GET    | `/`         | —             | List published jobs. Supports `page`, `limit`, `workMode`, `employmentType`, and `q` for full-text search |
 | GET    | `/:id`      | —             | One job with company and poster populated; increments `viewCount` |
 | GET    | `/my/jobs`  | **RECRUITER** | The calling recruiter's own jobs, in every status |
+| PUT    | `/:id`      | **RECRUITER** | Update a job. Owner only; `403` otherwise. Stamps `publishedAt` the first time status becomes `ACTIVE` |
+| DELETE | `/:id`      | **RECRUITER** | Delete a job. Owner only |
 
 Only `ACTIVE` jobs appear in the public list. A job is given a slug derived from its title plus a short random suffix, so two recruiters posting the same role do not collide on the unique index.
 
@@ -196,6 +198,22 @@ Outside production a `stack` field is included. Mongo duplicate keys become `409
 5. `logout` pulls one token from the array; `logout-all`, `change-password` and `reset-password` empty it, killing every session.
 
 Both cookies are `httpOnly`, so JavaScript in the browser cannot read them — this is the main defence against token theft via XSS. In production they are additionally `secure` and `sameSite=none`, which requires HTTPS.
+
+---
+
+## Rate limiting
+
+Three limiters, applied in `src/middleware/rateLimitMiddleware.js`:
+
+| Scope | Window | Limit | Notes |
+| ----- | ------ | ----- | ----- |
+| `POST /api/auth/login` | 15 min | 10 | Successful logins are not counted, so a busy legitimate user is never locked out |
+| `/forgot-password`, `/reset-password/:token` | 1 hour | 5 | Each request either sends mail or burns a token |
+| Everything under `/api` | 15 min | 300 | A broad ceiling |
+
+Limits are skipped when `NODE_ENV=test`, otherwise the suite would trip them in seconds.
+
+In production the app sets `trust proxy` to `1`. That matters: behind Caddy every request arrives from `127.0.0.1`, so without it all clients share a single bucket and one visitor could lock out everyone. It is deliberately `1` and not `true` — trusting every hop lets a client forge `X-Forwarded-For` and bypass the limiter entirely.
 
 ---
 
@@ -275,30 +293,35 @@ Set these under **Settings → Secrets and variables → Actions**:
 
 Step-by-step server setup — including the free-tier-friendly AWS path — is in **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**.
 
+Once the instance exists, `scripts/server-setup.sh` does the machine setup in one command — installs Docker and Caddy, generates the JWT secrets, and scaffolds `/opt/node-auth/.env`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Yasowant/node-auth-job-be/main/scripts/server-setup.sh | bash
+```
+
+It is safe to re-run and will not overwrite an existing `.env`. You still supply the Mongo connection string and the domain yourself.
+
 The short version: any Linux host with Docker installed, a `/opt/node-auth/.env` file containing the production environment, and an SSH key that GitHub Actions can use will work. Nginx or Caddy in front of it terminates TLS, which you need because production cookies are `secure`.
 
 ---
 
 ## Known issues
 
-Honest list of what is still outstanding.
+1. **Password reset has no delivery mechanism.** `forgotPassword` prints the reset token to the server console. It needs an email provider — Resend, SES or Postmark — before the flow is usable outside local development. This is the last real gap.
 
-1. **No rate limiting.** `/login`, `/forgot-password` and `/reset-password/:token` accept unlimited attempts, which makes credential stuffing and reset-token brute force cheap. `express-rate-limit` on those three routes would close it.
+2. **Validation is shallow beyond credentials.** Email and password are checked at the boundary, but richer payloads (profile updates, job postings) are still only checked for presence. A schema validator such as `zod` per route would make `400`s uniform.
 
-2. **Password reset has no delivery mechanism.** `forgotPassword` prints the reset token to the server console. It needs an email provider before it is usable outside local development.
-
-3. **No request body validation.** Controllers check that fields are present but not that they are the right shape, so type confusion reaches Mongoose. A schema validator such as `zod` at the route boundary would give consistent `400`s.
-
-4. **`refreshTokens` grows without bound.** Every login appends an entry and nothing prunes expired ones, so the user document inflates over time.
-
-5. **Jobs cannot yet be updated or deleted.** `POST`, list, detail and "my jobs" exist; `PUT /:id` and `DELETE /:id` do not.
+3. **`forgot-password` timing is observable.** The response is identical whether or not the account exists, but the branch that finds a user does bcrypt and database work, so response time still leaks membership to a patient attacker.
 
 ### Recently fixed
 
 - `login` was signing the **entire user document** — including the bcrypt password hash — into the refresh token and sending it to the browser in a cookie. It now signs only `user._id`.
-- `refreshAccessToken` was producing tokens with `userId` and `role` set to `undefined`, so every refreshed session failed authorisation. It now passes the user document.
-- `createCompany` called `res.status("409")` with a string, which Express 5 rejects — a duplicate company returned a `500` instead of a `409`.
-- The jobs controller was four empty functions, so `POST /api/jobs` never responded and the request hung until the client timed out.
+- `refreshAccessToken` produced tokens with `userId` and `role` `undefined`, so every refreshed session failed authorisation.
+- `createCompany` called `res.status("409")` with a string, which Express 5 rejects — duplicates returned a `500` instead of a `409`.
+- The jobs controller was four empty functions; `POST /api/jobs` never responded. The resource is now complete, including update and delete with ownership checks.
+- `/login`, `/forgot-password` and `/reset-password` had no rate limiting.
+- `refreshTokens` grew by one on every login forever. Dead tokens are now pruned and concurrent sessions capped at 10.
+- Registration accepted any string as an email and any length of password.
 
 ---
 

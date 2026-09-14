@@ -25,4 +25,26 @@ const generateRefereshToken = (userId) => {
   );
 };
 
-module.exports = { generateAccessToken, generateRefereshToken };
+/**
+ * Drop refresh tokens that no longer verify (expired, or signed with a retired
+ * secret). Without this the array grows by one on every login, forever.
+ */
+const pruneRefreshTokens = (tokens = []) =>
+  tokens.filter((token) => {
+    try {
+      jwt.verify(token, process.env.JWT_REFRESH_SECRET);
+      return true;
+    } catch {
+      return false;
+    }
+  });
+
+/** Most concurrent sessions we keep per user. */
+const MAX_REFRESH_TOKENS = 10;
+
+module.exports = {
+  generateAccessToken,
+  generateRefereshToken,
+  pruneRefreshTokens,
+  MAX_REFRESH_TOKENS,
+};

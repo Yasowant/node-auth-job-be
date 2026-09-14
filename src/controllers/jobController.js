@@ -183,4 +183,105 @@ const getMyJobs = async (req, res, next) => {
   }
 };
 
-module.exports = { createJob, getAllJobs, getJobById, getMyJobs };
+// ======================================================
+// UPDATE JOB  (RECRUITER - owner only)
+// ======================================================
+
+const UPDATABLE_FIELDS = [
+  "title",
+  "description",
+  "responsibilities",
+  "requirements",
+  "category",
+  "skills",
+  "location",
+  "workMode",
+  "employmentType",
+  "experience",
+  "salary",
+  "openings",
+  "screeningQuestions",
+  "expiresAt",
+];
+
+const updateJob = async (req, res, next) => {
+  try {
+    const job = await Job.findById(req.params.id);
+
+    if (!job) {
+      return res.status(404).json({
+        message: "Job not found",
+      });
+    }
+
+    // A recruiter may only touch their own postings.
+    if (job.postedBy.toString() !== req.user.userId) {
+      return res.status(403).json({
+        message: "You can only edit your own jobs",
+      });
+    }
+
+    for (const field of UPDATABLE_FIELDS) {
+      if (req.body[field] !== undefined) {
+        job[field] = req.body[field];
+      }
+    }
+
+    // Stamp publishedAt the first time a job goes live.
+    if (req.body.status !== undefined) {
+      if (req.body.status === "ACTIVE" && !job.publishedAt) {
+        job.publishedAt = new Date();
+      }
+
+      job.status = req.body.status;
+    }
+
+    await job.save();
+
+    return res.status(200).json({
+      message: "Job updated successfully",
+      job,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ======================================================
+// DELETE JOB  (RECRUITER - owner only)
+// ======================================================
+
+const deleteJob = async (req, res, next) => {
+  try {
+    const job = await Job.findById(req.params.id);
+
+    if (!job) {
+      return res.status(404).json({
+        message: "Job not found",
+      });
+    }
+
+    if (job.postedBy.toString() !== req.user.userId) {
+      return res.status(403).json({
+        message: "You can only delete your own jobs",
+      });
+    }
+
+    await job.deleteOne();
+
+    return res.status(200).json({
+      message: "Job deleted successfully",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports = {
+  createJob,
+  getAllJobs,
+  getJobById,
+  getMyJobs,
+  updateJob,
+  deleteJob,
+};

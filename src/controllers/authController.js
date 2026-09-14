@@ -3,10 +3,13 @@ const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
 
 const User = require("../models/User");
+const { validateCredentials } = require("../utils/validate");
 
 const {
   generateAccessToken,
   generateRefereshToken,
+  pruneRefreshTokens,
+  MAX_REFRESH_TOKENS,
 } = require("../utils/token");
 
 // ======================================================
@@ -41,6 +44,14 @@ const register = async (req, res, next) => {
     if (!name || !email || !password || !workStatus) {
       return res.status(400).json({
         message: "Name, email, password and workStatus are required",
+      });
+    }
+
+    const invalid = validateCredentials({ email, password });
+
+    if (invalid) {
+      return res.status(400).json({
+        message: invalid,
       });
     }
 
@@ -121,7 +132,12 @@ const login = async (req, res, next) => {
 
     const refreshToken = generateRefereshToken(user._id);
 
-    // Store refresh token
+    // Store refresh token, discarding dead ones and capping concurrent sessions
+    // so the array cannot grow unbounded across a user's lifetime.
+    user.refreshTokens = pruneRefreshTokens(user.refreshTokens).slice(
+      -(MAX_REFRESH_TOKENS - 1),
+    );
+
     user.refreshTokens.push(refreshToken);
 
     await user.save();
@@ -320,6 +336,14 @@ const resetPassword = async (req, res, next) => {
       });
     }
 
+    const weak = validateCredentials({ password });
+
+    if (weak) {
+      return res.status(400).json({
+        message: weak,
+      });
+    }
+
     // Hash received token
     const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
 
@@ -445,6 +469,14 @@ const changePassword = async (req, res, next) => {
     if (!currentPassword || !newPassword) {
       return res.status(400).json({
         message: "Current and new password are required",
+      });
+    }
+
+    const weak = validateCredentials({ password: newPassword });
+
+    if (weak) {
+      return res.status(400).json({
+        message: weak,
       });
     }
 

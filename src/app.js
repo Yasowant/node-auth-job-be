@@ -8,8 +8,16 @@ const companyRoutes = require("./routes/companyRoutes");
 const jobRoutes = require("./routes/jobRoutes");
 const errorMiddleware = require("./middleware/errorMiddleware");
 const { notFound } = require("./middleware/errorMiddleware");
+const { apiLimiter } = require("./middleware/rateLimitMiddleware");
 
 const app = express();
+
+// Behind Caddy/Nginx the socket address is the proxy, so rate limits and logs
+// would all key off one IP. Trust exactly one hop - never `true`, which lets a
+// client forge X-Forwarded-For and slip past the limiter entirely.
+if (process.env.NODE_ENV === "production") {
+  app.set("trust proxy", 1);
+}
 
 app.use(
   cors({
@@ -38,6 +46,8 @@ app.get("/health", (req, res) => {
     uptime: process.uptime(),
   });
 });
+
+app.use("/api", apiLimiter);
 
 app.use("/api/auth", authRoutes);
 app.use("/api/company", companyRoutes);
