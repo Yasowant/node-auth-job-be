@@ -105,7 +105,7 @@ describe("GET /api/auth/me", () => {
     expect(res.status).toBe(401);
   });
 
-  it("returns the current user without password or refresh tokens", async () => {
+  it("returns the current user without secrets", async () => {
     const cookies = await loginAs();
 
     const res = await request(app).get("/api/auth/me").set("Cookie", cookies);
@@ -114,6 +114,8 @@ describe("GET /api/auth/me", () => {
     expect(res.body.user.email).toBe(VALID_USER.email);
     expect(res.body.user).not.toHaveProperty("password");
     expect(res.body.user).not.toHaveProperty("refreshTokens");
+    expect(res.body.user).not.toHaveProperty("resetPasswordToken");
+    expect(res.body.user).not.toHaveProperty("resetPasswordExpires");
   });
 });
 
@@ -210,6 +212,16 @@ describe("POST /api/auth/refresh", () => {
 
     expect(res.status).toBe(401);
   });
+
+  it("immediately revokes the existing access token after logout-all", async () => {
+    const cookies = await loginAs();
+
+    await request(app).post("/api/auth/logout-all").set("Cookie", cookies);
+
+    const res = await request(app).get("/api/auth/me").set("Cookie", cookies);
+
+    expect(res.status).toBe(401);
+  });
 });
 
 describe("registration input validation", () => {
@@ -229,6 +241,20 @@ describe("registration input validation", () => {
 
     expect(res.status).toBe(400);
     expect(res.body.message).toMatch(/8 characters/);
+  });
+});
+
+describe("PUT /api/auth/profile", () => {
+  it("rejects a malformed email address", async () => {
+    const cookies = await loginAs();
+
+    const res = await request(app)
+      .put("/api/auth/profile")
+      .set("Cookie", cookies)
+      .send({ email: "not-an-email" });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/email/i);
   });
 });
 

@@ -17,6 +17,8 @@ const {
 // ======================================================
 
 const isProduction = process.env.NODE_ENV === "production";
+const PRIVATE_USER_FIELDS =
+  "-password -refreshTokens -resetPasswordToken -resetPasswordExpires";
 
 const accessCookieOptions = {
   httpOnly: true,
@@ -170,9 +172,7 @@ const login = async (req, res, next) => {
 
 const getMe = async (req, res, next) => {
   try {
-    const user = await User.findById(req.user.userId).select(
-      "-password -refreshTokens",
-    );
+    const user = await User.findById(req.user.userId).select(PRIVATE_USER_FIELDS);
 
     if (!user) {
       return res.status(404).json({
@@ -194,9 +194,7 @@ const getMe = async (req, res, next) => {
 
 const getProfile = async (req, res, next) => {
   try {
-    const user = await User.findById(req.user.userId).select(
-      "-password -refreshTokens",
-    );
+    const user = await User.findById(req.user.userId).select(PRIVATE_USER_FIELDS);
 
     if (!user) {
       return res.status(404).json({
@@ -303,8 +301,9 @@ const forgotPassword = async (req, res, next) => {
 
     await user.save();
 
-    // Development only
-    console.log("Reset token:", resetToken);
+    if (!isProduction) {
+      console.log("Reset token:", resetToken);
+    }
 
     return res.status(200).json({
       message: "Password reset instructions generated",
@@ -374,6 +373,7 @@ const resetPassword = async (req, res, next) => {
 
     // Invalidate all sessions
     user.refreshTokens = [];
+    user.tokenVersion += 1;
 
     await user.save();
 
@@ -442,6 +442,7 @@ const logoutAll = async (req, res, next) => {
 
     // Remove all refresh tokens
     user.refreshTokens = [];
+    user.tokenVersion += 1;
 
     await user.save();
 
@@ -507,6 +508,7 @@ const changePassword = async (req, res, next) => {
 
     // Invalidate all sessions
     user.refreshTokens = [];
+    user.tokenVersion += 1;
 
     await user.save();
 
@@ -525,14 +527,23 @@ const changePassword = async (req, res, next) => {
 
 const getAllUsers = async (req, res, next) => {
   try {
-    const users = await User.find()
-      .select(
-        "-password -refreshTokens -resetPasswordToken -resetPasswordExpires",
-      )
-      .sort({ createdAt: -1 });
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
+    const [users, total] = await Promise.all([
+      User.find()
+        .select(PRIVATE_USER_FIELDS)
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit),
+      User.countDocuments(),
+    ]);
     return res.status(200).json({
       message: "Users fetched successfully",
       count: users.length,
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
       users,
     });
   } catch (error) {
@@ -590,6 +601,12 @@ const updateProfile = async (req, res, next) => {
 
     // Email
     if (email !== undefined && email !== user.email) {
+      const invalid = validateCredentials({ email });
+
+      if (invalid) {
+        return res.status(400).json({ message: invalid });
+      }
+
       const existingUser = await User.findOne({
         email: email.toLowerCase(),
         _id: { $ne: userId },

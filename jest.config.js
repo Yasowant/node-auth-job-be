@@ -1,6 +1,6 @@
 module.exports = {
   testEnvironment: "node",
-  setupFilesAfterEnv: ["<rootDir>/tests/setup.js"],
+  setupFilesAfterEnv: [require.resolve("./tests/setup.js")],
   testMatch: ["<rootDir>/tests/**/*.test.js"],
   collectCoverageFrom: [
     "src/**/*.js",

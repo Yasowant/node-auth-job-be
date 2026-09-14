@@ -151,6 +151,16 @@ const getJobById = async (req, res, next) => {
       });
     }
 
+    const postedById = job.postedBy._id || job.postedBy;
+    const isOwner = req.user && postedById.toString() === req.user.userId;
+    const isAdmin = req.user && req.user.role === "ADMIN";
+
+    // Anonymous visitors may only read public listings. Recruiters can still
+    // inspect their own drafts; admins can moderate every listing.
+    if (job.status !== "ACTIVE" && !isOwner && !isAdmin) {
+      return res.status(404).json({ message: "Job not found" });
+    }
+
     // Count the view without waiting on it or racing the response.
     Job.updateOne({ _id: job._id }, { $inc: { viewCount: 1 } }).catch(() => {});
 

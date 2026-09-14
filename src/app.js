@@ -9,6 +9,10 @@ const jobRoutes = require("./routes/jobRoutes");
 const errorMiddleware = require("./middleware/errorMiddleware");
 const { notFound } = require("./middleware/errorMiddleware");
 const { apiLimiter } = require("./middleware/rateLimitMiddleware");
+const {
+  csrfMiddleware,
+  issueCsrfToken,
+} = require("./middleware/csrfMiddleware");
 
 const app = express();
 
@@ -28,6 +32,7 @@ app.use(
 
 app.use(express.json());
 app.use(cookieParser());
+app.use(csrfMiddleware);
 
 app.get("/", (req, res) => {
   res.json({
@@ -46,6 +51,10 @@ app.get("/health", (req, res) => {
     uptime: process.uptime(),
   });
 });
+
+// Browser clients call this once, then echo the token in X-CSRF-Token for
+// every state-changing API request.
+app.get("/api/csrf-token", issueCsrfToken);
 
 app.use("/api", apiLimiter);
 

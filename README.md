@@ -127,6 +127,14 @@ A healthy server answers `200` with `{"status":"ok","database":"connected", ...}
 
 Base URL: `/api`. All responses are JSON. Authenticated routes read the `accessToken` cookie, so browser clients must send requests with `credentials: "include"`.
 
+### CSRF protection
+
+Before a browser makes a `POST`, `PUT`, `PATCH`, or `DELETE` request, it must call
+`GET /api/csrf-token` with credentials included. Send the returned `csrfToken` in
+the `X-CSRF-Token` header on every subsequent state-changing request, along with
+`credentials: "include"`. The API also verifies that the request `Origin` matches
+`CLIENT_URL`.
+
 ### Service
 
 | Method | Path      | Auth | Description |
@@ -138,6 +146,7 @@ Base URL: `/api`. All responses are JSON. Authenticated routes read the `accessT
 
 | Method | Path                     | Auth      | Description |
 | ------ | ------------------------ | --------- | ----------- |
+| GET    | `/csrf-token`            | —         | Issues the CSRF token required by browser write requests |
 | POST   | `/register`              | —         | Body: `name`, `email`, `password`, `workStatus`. Creates a `USER`. `409` if the email exists |
 | POST   | `/login`                 | —         | Body: `email`, `password`. Sets `accessToken` and `refreshToken` cookies |
 | GET    | `/me`                    | cookie    | Current user, minus `password` and `refreshTokens` |
@@ -192,10 +201,10 @@ Outside production a `stack` field is included. Mongo duplicate keys become `409
 ## Authentication model
 
 1. `POST /login` verifies the password with bcrypt and issues two tokens.
-2. The **access token** (short-lived, carries `userId` and `role`) goes into the `accessToken` cookie and is what `authMiddleware` checks on every protected route.
+2. The **access token** (short-lived, carries `userId`, `role`, and a session version) goes into the `accessToken` cookie and is what `authMiddleware` checks on every protected route.
 3. The **refresh token** (long-lived) goes into the `refreshToken` cookie and is also appended to the user's `refreshTokens` array in Mongo — so a token can be revoked server-side, which a stateless JWT alone cannot do.
 4. `POST /refresh` verifies the cookie *and* confirms the token is still in that array before minting a new access token.
-5. `logout` pulls one token from the array; `logout-all`, `change-password` and `reset-password` empty it, killing every session.
+5. `logout` pulls one token from the array; `logout-all`, `change-password` and `reset-password` empty it and increment the session version, immediately invalidating every access token too.
 
 Both cookies are `httpOnly`, so JavaScript in the browser cannot read them — this is the main defence against token theft via XSS. In production they are additionally `secure` and `sameSite=none`, which requires HTTPS.
 

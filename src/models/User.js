@@ -220,6 +220,14 @@ const userSchema = new mongoose.Schema(
       },
     ],
 
+    // Incrementing this immediately invalidates every previously issued access
+    // token, without needing to store each short-lived token in the database.
+    tokenVersion: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
     resetPasswordToken: {
       type: String,
       default: null,

@@ -44,7 +44,7 @@ const getMyCompany = async (req, res, next) => {
   try {
     const company = await Company.findOne({
       owner: req.user.userId,
-    }).populate("owner", "name email");
+    }).populate("owner", "name");
 
     if (!company) {
       return res.status(400).json({
@@ -64,8 +64,8 @@ const getCompanyById = async (req, res, next) => {
   try {
     const { id } = req.params;
     const company = await Company.findById(id)
-      .populate("owner", "name email")
-      .populate("verifiedBy", "name email");
+      .populate("owner", "name")
+      .populate("verifiedBy", "name");
 
     if (!company) {
       return res.status(404).json({
@@ -84,12 +84,23 @@ const getCompanyById = async (req, res, next) => {
 
 const getAllCompany = async (req, res, next) => {
   try {
-    const companies = (
-      await Company.find().populate("owner", "name email")
-    ).sort({ createdAt: -1 });
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
+    const [companies, total] = await Promise.all([
+      Company.find()
+        .populate("owner", "name")
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit),
+      Company.countDocuments(),
+    ]);
 
     return res.status(200).json({
       message: "Companies fetched Successfully",
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
       companies,
     });
   } catch (error) {
@@ -196,7 +207,7 @@ const deleteCompany = async (req, res, next) => {
       });
     }
 
-    await Company.findByIdAndUpdate(id);
+    await company.deleteOne();
     return res.status(200).json({
       message: "Company delete Succesfully",
     });

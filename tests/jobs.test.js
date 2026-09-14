@@ -138,6 +138,28 @@ describe("GET /api/jobs", () => {
 });
 
 describe("GET /api/jobs/:id", () => {
+  it("does not expose a draft job to an anonymous visitor", async () => {
+    const cookies = await loginAsRecruiter();
+    await createCompany(cookies);
+    const created = await createJob(cookies);
+
+    const res = await request(app).get(`/api/jobs/${created.body.job._id}`);
+
+    expect(res.status).toBe(404);
+  });
+
+  it("lets the owner inspect their own draft job", async () => {
+    const cookies = await loginAsRecruiter();
+    await createCompany(cookies);
+    const created = await createJob(cookies);
+
+    const res = await request(app)
+      .get(`/api/jobs/${created.body.job._id}`)
+      .set("Cookie", cookies);
+
+    expect(res.status).toBe(200);
+  });
+
   it("returns 404 for an id that does not exist", async () => {
     const res = await request(app).get(
       "/api/jobs/507f1f77bcf86cd799439011",

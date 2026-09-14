@@ -1,4 +1,6 @@
 const mongoose = require("mongoose");
+const os = require("os");
+const path = require("path");
 
 // Secrets must exist before any module that reads them is required.
 process.env.NODE_ENV = "test";
@@ -6,6 +8,12 @@ process.env.JWT_ACCESS_SECRET = "test_access_secret_do_not_use_in_production";
 process.env.JWT_REFRESH_SECRET = "test_refresh_secret_do_not_use_in_production";
 process.env.ACCESS_TOKEN_EXPIRES_IN = "15m";
 process.env.REFRESH_TOKEN_EXPIRES_IN = "7d";
+// Keep downloaded MongoDB binaries in a writable temporary location when the
+// test process is sandboxed (rather than in the user's home-directory cache).
+process.env.MONGOMS_DOWNLOAD_DIR = path.join(
+  os.tmpdir(),
+  "node-auth-mongodb-binaries",
+);
 
 let memoryServer;
 
