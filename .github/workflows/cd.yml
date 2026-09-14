@@ -63,14 +63,20 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  deploy:
-    name: Deploy to EC2
+  # Deployment is optional: until a server exists and its secrets are set, the
+  # deploy job is skipped rather than failed. A missing server is a state this
+  # project can legitimately be in - it is not a broken build.
+  preflight:
+    name: Check deploy configuration
     runs-on: ubuntu-latest
     needs: build
-    environment: production
+
+    outputs:
+      configured: ${{ steps.check.outputs.configured }}
 
     steps:
-      - name: Check the deploy secrets are configured
+      - name: Look for the deploy secrets
+        id: check
         env:
           EC2_HOST: ${{ secrets.EC2_HOST }}
           EC2_USER: ${{ secrets.EC2_USER }}
@@ -84,14 +90,25 @@ jobs:
           [ -z "$GHCR_TOKEN" ]  && missing="$missing GHCR_TOKEN"
 
           if [ -n "$missing" ]; then
-            echo "::error::Missing repository secrets:$missing"
-            echo "Add them under Settings > Secrets and variables > Actions."
-            echo "See docs/DEPLOYMENT.md for what each one should contain."
-            exit 1
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Deploy skipped - not configured yet. Missing:$missing"
+            echo ""
+            echo "The image built and was pushed to GHCR successfully."
+            echo "It is ready to deploy as soon as a server exists."
+            echo "See docs/DEPLOYMENT.md, and scripts/server-setup.sh."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+            echo "All deploy secrets present - proceeding to deploy."
           fi
 
-          echo "All deploy secrets are present."
+  deploy:
+    name: Deploy to EC2
+    runs-on: ubuntu-latest
+    needs: [build, preflight]
+    if: needs.preflight.outputs.configured == 'true'
+    environment: production
 
+    steps:
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1.2.0
         with:
