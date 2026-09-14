@@ -261,47 +261,38 @@ Two workflows live in `.github/workflows`.
 
 **`cd.yml`** — runs on push to `main`:
 
-1. Calls `ci.yml`. Nothing deploys unless tests pass.
-2. Builds the image and pushes it to GitHub Container Registry, tagged `latest` and with the commit SHA.
-3. SSHes into the server, pulls the new image, and restarts the container.
-4. Polls `/health` for up to a minute. **If health never passes it rolls back to the previous image** and fails the job.
+1. Calls `ci.yml`. Nothing is verified until tests pass.
+2. Polls the live `/health` endpoint until the new version reports healthy, for up to 12 minutes, then writes the result into the run summary.
 
-Because every image is tagged with its commit SHA, rolling back by hand is one command on the server:
+There is no deploy step. Render watches this repository and redeploys itself on every push to `main`, so the workflow's job is to confirm the deploy actually came up rather than to perform it.
 
-```bash
-docker run -d --name node-auth --restart unless-stopped \
-  --env-file /opt/node-auth/.env -p 127.0.0.1:4000:4000 \
-  ghcr.io/yasowant/node-auth-job-be:<previous-sha>
-```
+The URL it checks defaults to the production service. To point it elsewhere, set a repository **variable** (not a secret) named `RENDER_URL` under Settings → Secrets and variables → Actions → Variables.
 
 ### Required GitHub secrets
 
-Set these under **Settings → Secrets and variables → Actions**:
-
-| Secret        | What it is |
-| ------------- | ---------- |
-| `EC2_HOST`    | Public IP or DNS name of the server |
-| `EC2_USER`    | SSH user (`ec2-user` on Amazon Linux, `ubuntu` on Ubuntu) |
-| `EC2_SSH_KEY` | The **private** key, whole file including the BEGIN/END lines |
-| `GHCR_TOKEN`  | A GitHub personal access token with `read:packages`, used by the server to pull the image |
-
-`GITHUB_TOKEN` is provided automatically and needs no configuration.
+None. Deployment credentials live in Render, not in this repository.
 
 ---
 
 ## Deployment
 
-Step-by-step server setup — including the free-tier-friendly AWS path — is in **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**.
+Live at **https://node-auth-job-backend.onrender.com** — hosted on Render's free tier, with MongoDB Atlas as the database.
 
-Once the instance exists, `scripts/server-setup.sh` does the machine setup in one command — installs Docker and Caddy, generates the JWT secrets, and scaffolds `/opt/node-auth/.env`:
+Render builds the `Dockerfile` in this repository and redeploys on every push to `main`. Configuration lives in the Render dashboard under Environment, not in the repo:
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/Yasowant/node-auth-job-be/main/scripts/server-setup.sh | bash
-```
+| Variable | Notes |
+| -------- | ----- |
+| `MONGO_URI` | Atlas connection string |
+| `JWT_ACCESS_SECRET` | Generated in Render |
+| `JWT_REFRESH_SECRET` | Generated in Render, different from the access secret |
+| `ACCESS_TOKEN_EXPIRES_IN` | `15m` |
+| `REFRESH_TOKEN_EXPIRES_IN` | `7d` |
+| `NODE_ENV` | `production` |
+| `CLIENT_URL` | Frontend origin. Required before a browser client can log in |
 
-It is safe to re-run and will not overwrite an existing `.env`. You still supply the Mongo connection string and the domain yourself.
+Two things worth knowing about the free tier: the instance sleeps after roughly 15 minutes of inactivity, so the first request afterwards takes 30–50 seconds, and there is no fixed outbound IP, so Atlas Network Access has to allow `0.0.0.0/0`. That makes the database password the only thing protecting the data — it must be long, random, and used nowhere else.
 
-The short version: any Linux host with Docker installed, a `/opt/node-auth/.env` file containing the production environment, and an SSH key that GitHub Actions can use will work. Nginx or Caddy in front of it terminates TLS, which you need because production cookies are `secure`.
+`docs/DEPLOYMENT.md` covers the self-hosted route (AWS EC2 with Docker and Caddy) if you later want to move off Render. `scripts/server-setup.sh` bootstraps such a server in one command.
 
 ---
 
