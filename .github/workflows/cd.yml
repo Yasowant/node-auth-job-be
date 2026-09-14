@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: cd-production
+  group: cd-${{ github.workflow }}-production
   cancel-in-progress: false
 
 env:
@@ -70,13 +70,35 @@ jobs:
     environment: production
 
     steps:
+      - name: Check the deploy secrets are configured
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+        run: |
+          missing=""
+          [ -z "$EC2_HOST" ]    && missing="$missing EC2_HOST"
+          [ -z "$EC2_USER" ]    && missing="$missing EC2_USER"
+          [ -z "$EC2_SSH_KEY" ] && missing="$missing EC2_SSH_KEY"
+          [ -z "$GHCR_TOKEN" ]  && missing="$missing GHCR_TOKEN"
+
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repository secrets:$missing"
+            echo "Add them under Settings > Secrets and variables > Actions."
+            echo "See docs/DEPLOYMENT.md for what each one should contain."
+            exit 1
+          fi
+
+          echo "All deploy secrets are present."
+
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          script_stops: true
+          script_stop: true
           script: |
             set -euo pipefail
 
