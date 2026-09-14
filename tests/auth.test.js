@@ -173,3 +173,41 @@ describe("POST /api/auth/logout", () => {
     expect(cleared).toMatch(/refreshToken=;/);
   });
 });
+
+describe("POST /api/auth/refresh", () => {
+  it("rejects a request with no refresh cookie", async () => {
+    const res = await request(app).post("/api/auth/refresh");
+
+    expect(res.status).toBe(401);
+  });
+
+  it("issues a new access cookie that actually authenticates", async () => {
+    const cookies = await loginAs();
+
+    const refreshed = await request(app)
+      .post("/api/auth/refresh")
+      .set("Cookie", cookies);
+
+    expect(refreshed.status).toBe(200);
+
+    // The refreshed token must carry userId and role, or /me returns 401.
+    const res = await request(app)
+      .get("/api/auth/me")
+      .set("Cookie", refreshed.headers["set-cookie"]);
+
+    expect(res.status).toBe(200);
+    expect(res.body.user.email).toBe(VALID_USER.email);
+  });
+
+  it("stops working after logout-all revokes the token", async () => {
+    const cookies = await loginAs();
+
+    await request(app).post("/api/auth/logout-all").set("Cookie", cookies);
+
+    const res = await request(app)
+      .post("/api/auth/refresh")
+      .set("Cookie", cookies);
+
+    expect(res.status).toBe(401);
+  });
+});

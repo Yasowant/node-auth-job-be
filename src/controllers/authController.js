@@ -119,7 +119,7 @@ const login = async (req, res, next) => {
     // Generate tokens
     const accessToken = generateAccessToken(user);
 
-    const refreshToken = generateRefereshToken(user);
+    const refreshToken = generateRefereshToken(user._id);
 
     // Store refresh token
     user.refreshTokens.push(refreshToken);
@@ -234,7 +234,7 @@ const refreshAccessToken = async (req, res, next) => {
     }
 
     // Generate new access token
-    const newAccessToken = generateAccessToken(user._id);
+    const newAccessToken = generateAccessToken(user);
 
     // Replace access cookie
     res.cookie("accessToken", newAccessToken, accessCookieOptions);

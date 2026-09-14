@@ -4,7 +4,6 @@ const notFound = (req, res, next) => {
   });
 };
 
-// eslint-disable-next-line no-unused-vars
 const errorMiddleware = (err, req, res, next) => {
   let status = err.statusCode || err.status || 500;
   let message = err.message || "Internal server error";

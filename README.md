@@ -166,9 +166,14 @@ Base URL: `/api`. All responses are JSON. Authenticated routes read the `accessT
 
 ### Jobs — `/api/jobs`
 
-| Method | Path | Auth          | Description |
-| ------ | ---- | ------------- | ----------- |
-| POST   | `/`  | **RECRUITER** | Create a job — **not yet implemented**, see [Known issues](#known-issues) |
+| Method | Path        | Auth          | Description |
+| ------ | ----------- | ------------- | ----------- |
+| POST   | `/`         | **RECRUITER** | Create a job for the recruiter's own company. Defaults to `DRAFT`; send `status: "ACTIVE"` to publish immediately |
+| GET    | `/`         | —             | List published jobs. Supports `page`, `limit`, `workMode`, `employmentType`, and `q` for full-text search |
+| GET    | `/:id`      | —             | One job with company and poster populated; increments `viewCount` |
+| GET    | `/my/jobs`  | **RECRUITER** | The calling recruiter's own jobs, in every status |
+
+Only `ACTIVE` jobs appear in the public list. A job is given a slug derived from its title plus a short random suffix, so two recruiters posting the same role do not collide on the unique index.
 
 ### Error shape
 
@@ -276,21 +281,24 @@ The short version: any Linux host with Docker installed, a `/opt/node-auth/.env`
 
 ## Known issues
 
-Honest list of what is not finished. These are pre-existing and were not introduced by the CI/CD setup.
+Honest list of what is still outstanding.
 
-1. **The jobs controller is unimplemented.** Every handler in `src/controllers/jobController.js` is an empty function. `POST /api/jobs` never sends a response, so the request hangs until the client times out. `getAllJobs`, `getJobById` and `getMyJobs` are written but not routed.
+1. **No rate limiting.** `/login`, `/forgot-password` and `/reset-password/:token` accept unlimited attempts, which makes credential stuffing and reset-token brute force cheap. `express-rate-limit` on those three routes would close it.
 
-2. **`login` signs the entire user document into the refresh token.** `generateRefereshToken` expects a user *id*, but `login` passes the whole Mongoose document. The resulting JWT payload therefore contains every user field — including the bcrypt password hash — and is handed to the browser in a cookie. It also makes the token very large. `login` should pass `user._id`.
+2. **Password reset has no delivery mechanism.** `forgotPassword` prints the reset token to the server console. It needs an email provider before it is usable outside local development.
 
-3. **Refreshed access tokens are unusable.** `refreshAccessToken` calls `generateAccessToken(user._id)`, but that function reads `user._id` and `user.role` off its argument. Passing a bare id produces a token whose `userId` and `role` are both `undefined`, so the refreshed cookie fails every authorisation check. It should pass `user`.
+3. **No request body validation.** Controllers check that fields are present but not that they are the right shape, so type confusion reaches Mongoose. A schema validator such as `zod` at the route boundary would give consistent `400`s.
 
-4. **No rate limiting.** `/login`, `/forgot-password` and `/reset-password/:token` accept unlimited attempts, which makes credential stuffing and reset-token brute force cheap. `express-rate-limit` on those three routes would close it.
+4. **`refreshTokens` grows without bound.** Every login appends an entry and nothing prunes expired ones, so the user document inflates over time.
 
-5. **Password reset has no delivery mechanism.** `forgotPassword` prints the reset token to the server console. It needs an email provider before it is usable outside local development.
+5. **Jobs cannot yet be updated or deleted.** `POST`, list, detail and "my jobs" exist; `PUT /:id` and `DELETE /:id` do not.
 
-6. **No request body validation.** Controllers check for presence but not shape, so type confusion reaches Mongoose. A schema validator such as `zod` at the route boundary would give consistent `400`s.
+### Recently fixed
 
-7. **`refreshTokens` grows without bound.** Every login appends; nothing prunes expired entries. Over time this inflates the user document.
+- `login` was signing the **entire user document** — including the bcrypt password hash — into the refresh token and sending it to the browser in a cookie. It now signs only `user._id`.
+- `refreshAccessToken` was producing tokens with `userId` and `role` set to `undefined`, so every refreshed session failed authorisation. It now passes the user document.
+- `createCompany` called `res.status("409")` with a string, which Express 5 rejects — a duplicate company returned a `500` instead of a `409`.
+- The jobs controller was four empty functions, so `POST /api/jobs` never responded and the request hung until the client timed out.
 
 ---
 

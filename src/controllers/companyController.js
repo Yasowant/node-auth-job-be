@@ -14,7 +14,7 @@ const createCompany = async (req, res, next) => {
     const existingCompany = await Company.findOne({ slug });
 
     if (existingCompany) {
-      return res.status("409").json({
+      return res.status(409).json({
         message: "Company with this name is alredy exists",
       });
     }
