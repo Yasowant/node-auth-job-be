@@ -12,6 +12,7 @@ const {
   logoutAll,
   changePassword,
   getAllUsers,
+  updateUserRole,
   updateProfile,
 } = require("../controllers/authController");
 const authMiddleware = require("../middleware/authMiddleware");
@@ -31,6 +32,12 @@ router.post("/reset-password/:token", passwordResetLimiter, resetPassword);
 router.post("/logout-all", authMiddleware, logoutAll);
 router.post("/logout", logout);
 router.get("/users", authMiddleware, authorizeRoles("ADMIN"), getAllUsers);
+router.patch(
+  "/users/:id/role",
+  authMiddleware,
+  authorizeRoles("ADMIN"),
+  updateUserRole,
+);
 router.put("/profile", authMiddleware, updateProfile);
 
 module.exports = router;

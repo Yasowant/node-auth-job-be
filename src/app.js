@@ -6,6 +6,9 @@ const mongoose = require("mongoose");
 const authRoutes = require("./routes/authRoutes");
 const companyRoutes = require("./routes/companyRoutes");
 const jobRoutes = require("./routes/jobRoutes");
+const swaggerUi = require("swagger-ui-express");
+const openapiSpec = require("./docs/openapi.json");
+const applicationRoutes = require("./routes/applicationRoutes");
 const errorMiddleware = require("./middleware/errorMiddleware");
 const { notFound } = require("./middleware/errorMiddleware");
 const { apiLimiter } = require("./middleware/rateLimitMiddleware");
@@ -56,11 +59,16 @@ app.get("/health", (req, res) => {
 // every state-changing API request.
 app.get("/api/csrf-token", issueCsrfToken);
 
+// Interactive API docs - browse and test every endpoint from the browser.
+// Mounted at "/api-docs" (not under "/api") so it is not rate-limited itself.
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(openapiSpec));
+
 app.use("/api", apiLimiter);
 
 app.use("/api/auth", authRoutes);
 app.use("/api/company", companyRoutes);
 app.use("/api/jobs", jobRoutes);
+app.use("/api/applications", applicationRoutes);
 
 app.use(notFound);
 app.use(errorMiddleware);

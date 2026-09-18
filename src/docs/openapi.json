@@ -1,0 +1,1840 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "node-auth-job-be API",
+    "version": "1.0.0",
+    "description": "JWT authentication + job-board REST API.\n\n**Before any POST/PUT/PATCH/DELETE will work here:**\n1. Call `GET /csrf-token` once (below) \u2014 this sets a `csrfToken` cookie and returns the same value in the response body.\n2. Click the lock icon or the row's header, then use the `X-CSRF-Token` header field on the request and paste that value in.\n3. This page is served from `http://localhost:4000`, so the `Origin` header the browser sends will be `http://localhost:4000`. Your `.env` `CLIENT_URL` must match that for CSRF checks to pass when testing from here \u2014 set `CLIENT_URL=http://localhost:4000` in `.env` while using this page, then change it back for your real frontend.\n4. Login/register set an `httpOnly` cookie automatically; since this page is same-origin, that cookie is sent on every later request without any extra setup."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:4000/api",
+      "description": "Local dev"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "cookieAuth": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "accessToken",
+        "description": "Set automatically by /auth/login or /auth/register. No manual action needed on this page since it's same-origin."
+      },
+      "csrfToken": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-CSRF-Token",
+        "description": "Paste the value from GET /csrf-token here. Click the Authorize button (top right) to set it once for every request."
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "User": {
+        "type": "object",
+        "properties": {
+          "_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "USER",
+              "RECRUITER",
+              "ADMIN"
+            ]
+          },
+          "workStatus": {
+            "type": "string",
+            "enum": [
+              "EXPERIENCED",
+              "FRESHER"
+            ]
+          },
+          "avatar": {
+            "type": "string",
+            "nullable": true
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true
+          },
+          "location": {
+            "type": "string",
+            "nullable": true
+          },
+          "headline": {
+            "type": "string",
+            "nullable": true
+          },
+          "bio": {
+            "type": "string",
+            "nullable": true
+          },
+          "skills": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "resume": {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string",
+                "nullable": true
+              },
+              "fileName": {
+                "type": "string",
+                "nullable": true
+              }
+            }
+          }
+        }
+      },
+      "Company": {
+        "type": "object",
+        "required": [
+          "name",
+          "slug"
+        ],
+        "properties": {
+          "_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "website": {
+            "type": "string"
+          },
+          "logo": {
+            "type": "string"
+          },
+          "industry": {
+            "type": "string"
+          },
+          "size": {
+            "type": "string",
+            "enum": [
+              "1-10",
+              "11-50",
+              "51-200",
+              "201-500",
+              "500+"
+            ]
+          },
+          "about": {
+            "type": "string"
+          },
+          "locations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "owner": {
+            "type": "string"
+          },
+          "verified": {
+            "type": "boolean"
+          }
+        }
+      },
+      "Job": {
+        "type": "object",
+        "required": [
+          "title",
+          "description"
+        ],
+        "properties": {
+          "_id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "company": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "responsibilities": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "requirements": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "category": {
+            "type": "string"
+          },
+          "skills": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "location": {
+            "type": "object",
+            "properties": {
+              "city": {
+                "type": "string"
+              },
+              "state": {
+                "type": "string"
+              },
+              "country": {
+                "type": "string"
+              }
+            }
+          },
+          "workMode": {
+            "type": "string",
+            "enum": [
+              "REMOTE",
+              "HYBRID",
+              "ONSITE"
+            ]
+          },
+          "employmentType": {
+            "type": "string",
+            "enum": [
+              "FULL_TIME",
+              "PART_TIME",
+              "CONTRACT",
+              "INTERNSHIP"
+            ]
+          },
+          "experience": {
+            "type": "object",
+            "properties": {
+              "min": {
+                "type": "number"
+              },
+              "max": {
+                "type": "number"
+              }
+            }
+          },
+          "salary": {
+            "type": "object",
+            "properties": {
+              "min": {
+                "type": "number"
+              },
+              "max": {
+                "type": "number"
+              },
+              "currency": {
+                "type": "string"
+              },
+              "period": {
+                "type": "string"
+              },
+              "isDisclosed": {
+                "type": "boolean"
+              }
+            }
+          },
+          "openings": {
+            "type": "integer"
+          },
+          "screeningQuestions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "question": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string"
+                },
+                "required": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "DRAFT",
+              "PENDING_REVIEW",
+              "ACTIVE",
+              "PAUSED",
+              "CLOSED",
+              "EXPIRED"
+            ]
+          },
+          "applicantCount": {
+            "type": "integer"
+          },
+          "viewCount": {
+            "type": "integer"
+          }
+        }
+      },
+      "Application": {
+        "type": "object",
+        "properties": {
+          "_id": {
+            "type": "string"
+          },
+          "job": {
+            "type": "string"
+          },
+          "applicant": {
+            "type": "string"
+          },
+          "company": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "APPLIED",
+              "UNDER_REVIEW",
+              "SHORTLISTED",
+              "INTERVIEW",
+              "OFFERED",
+              "REJECTED",
+              "WITHDRAWN"
+            ]
+          },
+          "coverNote": {
+            "type": "string",
+            "nullable": true
+          },
+          "resume": {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string"
+              },
+              "fileName": {
+                "type": "string"
+              }
+            }
+          },
+          "answers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "question": {
+                  "type": "string"
+                },
+                "answer": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "recruiterNotes": {
+            "type": "string",
+            "nullable": true
+          },
+          "statusHistory": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "type": "string"
+                },
+                "changedAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "changedBy": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Service",
+      "description": "Health checks"
+    },
+    {
+      "name": "Auth",
+      "description": "Registration, login, session, profile"
+    },
+    {
+      "name": "Company",
+      "description": "Recruiter companies"
+    },
+    {
+      "name": "Jobs",
+      "description": "Job postings"
+    },
+    {
+      "name": "Applications",
+      "description": "Candidates applying to jobs"
+    }
+  ],
+  "paths": {
+    "/csrf-token": {
+      "get": {
+        "tags": [
+          "Service"
+        ],
+        "summary": "Get a CSRF token (call this first)",
+        "responses": {
+          "200": {
+            "description": "Token issued, also set as a cookie",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "csrfToken": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/register": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Register a new USER",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "email",
+                  "password",
+                  "workStatus"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "example": "Kiran Yasowant"
+                  },
+                  "email": {
+                    "type": "string",
+                    "example": "kiran@example.com"
+                  },
+                  "password": {
+                    "type": "string",
+                    "example": "StrongPass123!"
+                  },
+                  "workStatus": {
+                    "type": "string",
+                    "enum": [
+                      "EXPERIENCED",
+                      "FRESHER"
+                    ],
+                    "example": "FRESHER"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "User created"
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Email already registered",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "csrfToken": []
+          }
+        ]
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Log in (sets accessToken + refreshToken cookies)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "email",
+                  "password"
+                ],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "example": "kiran@example.com"
+                  },
+                  "password": {
+                    "type": "string",
+                    "example": "StrongPass123!"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Logged in"
+          },
+          "401": {
+            "description": "Invalid credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "csrfToken": []
+          }
+        ]
+      }
+    },
+    "/auth/me": {
+      "get": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Get the logged-in user",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current user"
+          },
+          "401": {
+            "description": "Not logged in"
+          }
+        }
+      }
+    },
+    "/auth/refresh": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Issue a new access token from the refresh token cookie",
+        "responses": {
+          "200": {
+            "description": "Access token refreshed"
+          },
+          "401": {
+            "description": "Invalid/expired refresh token"
+          }
+        },
+        "security": [
+          {
+            "csrfToken": []
+          }
+        ]
+      }
+    },
+    "/auth/forgot-password": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Request a password reset token",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "email"
+                ],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "example": "kiran@example.com"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Reset instructions generated (token logged server-side in dev)"
+          }
+        },
+        "security": [
+          {
+            "csrfToken": []
+          }
+        ]
+      }
+    },
+    "/auth/change-password": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Change password while logged in",
+        "security": [
+          {
+            "cookieAuth": [],
+            "csrfToken": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "currentPassword",
+                  "newPassword"
+                ],
+                "properties": {
+                  "currentPassword": {
+                    "type": "string",
+                    "example": "StrongPass123!"
+                  },
+                  "newPassword": {
+                    "type": "string",
+                    "example": "EvenStronger456!"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Password changed, sessions cleared"
+          },
+          "401": {
+            "description": "Current password incorrect"
+          }
+        }
+      }
+    },
+    "/auth/reset-password/{token}": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Reset password using the emailed/logged token",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "password"
+                ],
+                "properties": {
+                  "password": {
+                    "type": "string",
+                    "example": "NewPassword789!"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Password reset"
+          },
+          "400": {
+            "description": "Invalid or expired token"
+          }
+        },
+        "security": [
+          {
+            "csrfToken": []
+          }
+        ]
+      }
+    },
+    "/auth/logout-all": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Log out of every device",
+        "security": [
+          {
+            "cookieAuth": [],
+            "csrfToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Logged out everywhere"
+          }
+        }
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Log out of the current session",
+        "responses": {
+          "200": {
+            "description": "Logged out"
+          }
+        },
+        "security": [
+          {
+            "csrfToken": []
+          }
+        ]
+      }
+    },
+    "/auth/users": {
+      "get": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "List all users (ADMIN only)",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated user list"
+          },
+          "403": {
+            "description": "Not an admin"
+          }
+        }
+      }
+    },
+    "/auth/profile": {
+      "put": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Update the logged-in user's profile",
+        "security": [
+          {
+            "cookieAuth": [],
+            "csrfToken": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "phone": {
+                    "type": "string"
+                  },
+                  "location": {
+                    "type": "string"
+                  },
+                  "headline": {
+                    "type": "string"
+                  },
+                  "bio": {
+                    "type": "string"
+                  },
+                  "skills": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "preferredJobTitle": {
+                    "type": "string"
+                  },
+                  "expectedSalary": {
+                    "type": "object",
+                    "properties": {
+                      "min": {
+                        "type": "number"
+                      },
+                      "max": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "resume": {
+                    "type": "object",
+                    "properties": {
+                      "url": {
+                        "type": "string",
+                        "example": "https://example.com/resumes/kiran.pdf"
+                      },
+                      "fileName": {
+                        "type": "string",
+                        "example": "kiran-resume.pdf"
+                      }
+                    },
+                    "description": "No file upload yet - paste a hosted resume URL."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Profile updated"
+          }
+        }
+      }
+    },
+    "/company": {
+      "post": {
+        "tags": [
+          "Company"
+        ],
+        "summary": "Create a company (RECRUITER)",
+        "security": [
+          {
+            "cookieAuth": [],
+            "csrfToken": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "slug"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "example": "Acme Corp"
+                  },
+                  "slug": {
+                    "type": "string",
+                    "example": "acme-corp"
+                  },
+                  "website": {
+                    "type": "string",
+                    "example": "https://acme.com"
+                  },
+                  "industry": {
+                    "type": "string",
+                    "example": "Software"
+                  },
+                  "size": {
+                    "type": "string",
+                    "enum": [
+                      "1-10",
+                      "11-50",
+                      "51-200",
+                      "201-500",
+                      "500+"
+                    ]
+                  },
+                  "about": {
+                    "type": "string",
+                    "example": "We build developer tools."
+                  },
+                  "locations": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "example": [
+                      "Bangalore",
+                      "Remote"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Company created"
+          },
+          "409": {
+            "description": "Slug already exists"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Company"
+        ],
+        "summary": "List companies",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated companies"
+          }
+        }
+      }
+    },
+    "/company/my/company": {
+      "get": {
+        "tags": [
+          "Company"
+        ],
+        "summary": "Get my company (RECRUITER)",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Your company"
+          },
+          "400": {
+            "description": "No company yet"
+          }
+        }
+      }
+    },
+    "/company/{id}": {
+      "get": {
+        "tags": [
+          "Company"
+        ],
+        "summary": "Get a company by id",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Company"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Company"
+        ],
+        "summary": "Update a company (owner only)",
+        "security": [
+          {
+            "cookieAuth": [],
+            "csrfToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "about": {
+                    "type": "string"
+                  },
+                  "size": {
+                    "type": "string"
+                  },
+                  "website": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated"
+          },
+          "403": {
+            "description": "Not the owner"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Company"
+        ],
+        "summary": "Delete a company (owner only)",
+        "security": [
+          {
+            "cookieAuth": [],
+            "csrfToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted"
+          },
+          "403": {
+            "description": "Not the owner"
+          }
+        }
+      }
+    },
+    "/company/{id}/verify": {
+      "patch": {
+        "tags": [
+          "Company"
+        ],
+        "summary": "Verify a company (ADMIN only)",
+        "security": [
+          {
+            "cookieAuth": [],
+            "csrfToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Verified"
+          },
+          "403": {
+            "description": "Not an admin"
+          }
+        }
+      }
+    },
+    "/jobs": {
+      "post": {
+        "tags": [
+          "Jobs"
+        ],
+        "summary": "Create a job (RECRUITER, needs a company first)",
+        "security": [
+          {
+            "cookieAuth": [],
+            "csrfToken": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "title",
+                  "description"
+                ],
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "example": "Backend Engineer"
+                  },
+                  "description": {
+                    "type": "string",
+                    "example": "Build and maintain our REST APIs."
+                  },
+                  "responsibilities": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "example": [
+                      "Design APIs",
+                      "Write tests"
+                    ]
+                  },
+                  "requirements": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "example": [
+                      "2+ years Node.js"
+                    ]
+                  },
+                  "category": {
+                    "type": "string",
+                    "example": "Engineering"
+                  },
+                  "skills": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "example": [
+                      "node.js",
+                      "mongodb"
+                    ]
+                  },
+                  "location": {
+                    "type": "object",
+                    "properties": {
+                      "city": {
+                        "type": "string"
+                      },
+                      "state": {
+                        "type": "string"
+                      },
+                      "country": {
+                        "type": "string"
+                      }
+                    },
+                    "example": {
+                      "city": "Bangalore",
+                      "state": "Karnataka",
+                      "country": "India"
+                    }
+                  },
+                  "workMode": {
+                    "type": "string",
+                    "enum": [
+                      "REMOTE",
+                      "HYBRID",
+                      "ONSITE"
+                    ],
+                    "example": "HYBRID"
+                  },
+                  "employmentType": {
+                    "type": "string",
+                    "enum": [
+                      "FULL_TIME",
+                      "PART_TIME",
+                      "CONTRACT",
+                      "INTERNSHIP"
+                    ],
+                    "example": "FULL_TIME"
+                  },
+                  "experience": {
+                    "type": "object",
+                    "properties": {
+                      "min": {
+                        "type": "number"
+                      },
+                      "max": {
+                        "type": "number"
+                      }
+                    },
+                    "example": {
+                      "min": 2,
+                      "max": 5
+                    }
+                  },
+                  "salary": {
+                    "type": "object",
+                    "properties": {
+                      "min": {
+                        "type": "number"
+                      },
+                      "max": {
+                        "type": "number"
+                      },
+                      "currency": {
+                        "type": "string"
+                      },
+                      "period": {
+                        "type": "string"
+                      },
+                      "isDisclosed": {
+                        "type": "boolean"
+                      }
+                    },
+                    "example": {
+                      "min": 800000,
+                      "max": 1400000,
+                      "currency": "INR",
+                      "period": "YEARLY",
+                      "isDisclosed": true
+                    }
+                  },
+                  "openings": {
+                    "type": "integer",
+                    "example": 2
+                  },
+                  "screeningQuestions": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "question": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string"
+                        },
+                        "required": {
+                          "type": "boolean"
+                        }
+                      }
+                    },
+                    "example": [
+                      {
+                        "question": "Years of Node.js experience?",
+                        "type": "TEXT",
+                        "required": true
+                      }
+                    ]
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "DRAFT",
+                      "ACTIVE"
+                    ],
+                    "example": "ACTIVE"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Job created"
+          },
+          "400": {
+            "description": "No company yet, or missing fields"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Jobs"
+        ],
+        "summary": "List active jobs",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 20
+            }
+          },
+          {
+            "name": "workMode",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "REMOTE",
+                "HYBRID",
+                "ONSITE"
+              ]
+            }
+          },
+          {
+            "name": "employmentType",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "FULL_TIME",
+                "PART_TIME",
+                "CONTRACT",
+                "INTERNSHIP"
+              ]
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Full-text search on title/description/skills"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated jobs"
+          }
+        }
+      }
+    },
+    "/jobs/my/jobs": {
+      "get": {
+        "tags": [
+          "Jobs"
+        ],
+        "summary": "List my jobs, every status (RECRUITER)",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Your jobs"
+          }
+        }
+      }
+    },
+    "/jobs/{id}": {
+      "get": {
+        "tags": [
+          "Jobs"
+        ],
+        "summary": "Get a job by id (drafts visible to owner/admin only)",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Job"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Jobs"
+        ],
+        "summary": "Update a job (owner only)",
+        "security": [
+          {
+            "cookieAuth": [],
+            "csrfToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "example": "ACTIVE"
+                  },
+                  "openings": {
+                    "type": "integer",
+                    "example": 3
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated"
+          },
+          "403": {
+            "description": "Not the owner"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Jobs"
+        ],
+        "summary": "Delete a job (owner only)",
+        "security": [
+          {
+            "cookieAuth": [],
+            "csrfToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted"
+          },
+          "403": {
+            "description": "Not the owner"
+          }
+        }
+      }
+    },
+    "/applications": {
+      "post": {
+        "tags": [
+          "Applications"
+        ],
+        "summary": "Apply to a job (USER, needs a resume on profile)",
+        "security": [
+          {
+            "cookieAuth": [],
+            "csrfToken": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "jobId"
+                ],
+                "properties": {
+                  "jobId": {
+                    "type": "string",
+                    "example": "66fjobidgoeshere123"
+                  },
+                  "coverNote": {
+                    "type": "string",
+                    "example": "I'd love to work on this role."
+                  },
+                  "answers": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "question": {
+                          "type": "string"
+                        },
+                        "answer": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "example": [
+                      {
+                        "question": "Years of Node.js experience?",
+                        "answer": "3 years"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Application submitted"
+          },
+          "409": {
+            "description": "Already applied"
+          },
+          "400": {
+            "description": "No resume on profile, or job not active"
+          }
+        }
+      }
+    },
+    "/applications/my": {
+      "get": {
+        "tags": [
+          "Applications"
+        ],
+        "summary": "My applications (USER)",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 20
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated applications"
+          }
+        }
+      }
+    },
+    "/applications/job/{jobId}": {
+      "get": {
+        "tags": [
+          "Applications"
+        ],
+        "summary": "Applicants for a job (RECRUITER, job owner only)",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "jobId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Applicants"
+          },
+          "403": {
+            "description": "Not the job owner"
+          }
+        }
+      }
+    },
+    "/applications/{id}/status": {
+      "patch": {
+        "tags": [
+          "Applications"
+        ],
+        "summary": "Update an application's status (RECRUITER, job owner only)",
+        "security": [
+          {
+            "cookieAuth": [],
+            "csrfToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "status"
+                ],
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "UNDER_REVIEW",
+                      "SHORTLISTED",
+                      "INTERVIEW",
+                      "OFFERED",
+                      "REJECTED"
+                    ],
+                    "example": "SHORTLISTED"
+                  },
+                  "note": {
+                    "type": "string",
+                    "example": "Strong Node.js background."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Status updated"
+          },
+          "403": {
+            "description": "Not the job owner"
+          }
+        }
+      }
+    },
+    "/applications/{id}/withdraw": {
+      "patch": {
+        "tags": [
+          "Applications"
+        ],
+        "summary": "Withdraw my application (USER, applicant only)",
+        "security": [
+          {
+            "cookieAuth": [],
+            "csrfToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Withdrawn"
+          },
+          "403": {
+            "description": "Not your application"
+          }
+        }
+      }
+    },
+    "/auth/users/{id}/role": {
+      "patch": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Change a user's role (ADMIN only)",
+        "security": [
+          {
+            "cookieAuth": [],
+            "csrfToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "role"
+                ],
+                "properties": {
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "USER",
+                      "RECRUITER",
+                      "ADMIN"
+                    ],
+                    "example": "RECRUITER"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Role updated, user must log in again"
+          },
+          "403": {
+            "description": "Not an admin"
+          },
+          "404": {
+            "description": "User not found"
+          }
+        }
+      }
+    }
+  }
+}

@@ -3,6 +3,10 @@ require("dotenv").config();
 const app = require("./src/app");
 const connectDB = require("./src/config/db");
 const { disconnectDB } = require("./src/config/db");
+const {
+  connectProducer,
+  disconnectProducer,
+} = require("./src/events/producers");
 
 const PORT = process.env.PORT || 4000;
 
@@ -11,6 +15,7 @@ let server;
 const startServer = async () => {
   try {
     await connectDB();
+    await connectProducer();
 
     server = app.listen(PORT, () => {
       console.log(`Server running on http://localhost:${PORT}`);
@@ -36,7 +41,7 @@ const shutdown = async (signal) => {
   if (server) {
     await new Promise((resolve) => server.close(resolve));
   }
-
+  await disconnectProducer();
   await disconnectDB();
   process.exit(0);
 };

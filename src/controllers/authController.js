@@ -552,6 +552,54 @@ const getAllUsers = async (req, res, next) => {
 };
 
 // ======================================================
+// UPDATE USER ROLE  (ADMIN only)
+// ======================================================
+
+const ALLOWED_ROLES = ["USER", "RECRUITER", "ADMIN"];
+
+const updateUserRole = async (req, res, next) => {
+  try {
+    const { role } = req.body;
+
+    if (!ALLOWED_ROLES.includes(role)) {
+      return res.status(400).json({
+        message: `role must be one of: ${ALLOWED_ROLES.join(", ")}`,
+      });
+    }
+
+    const user = await User.findById(req.params.id);
+
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found",
+      });
+    }
+
+    user.role = role;
+
+    // A role change shouldn't leave old sessions valid under the new
+    // permissions - force this user to log in again everywhere.
+    user.tokenVersion += 1;
+    user.refreshTokens = [];
+
+    await user.save();
+
+    return res.status(200).json({
+      message: "User role updated successfully",
+
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ======================================================
 // UPDATE PROFILE
 // ======================================================
 
@@ -576,6 +624,7 @@ const updateProfile = async (req, res, next) => {
       preferredLocation,
       expectedSalary,
       noticePeriod,
+      resume,
     } = req.body;
 
     const user = await User.findById(userId);
@@ -658,6 +707,17 @@ const updateProfile = async (req, res, next) => {
       user.noticePeriod = noticePeriod;
     }
 
+    // Resume as a URL the candidate pastes in (e.g. a link to a hosted PDF) -
+    // there's no file upload endpoint yet, so this is deliberately just a
+    // link + filename, not a binary upload.
+    if (resume !== undefined) {
+      user.resume = {
+        url: resume.url || null,
+        fileName: resume.fileName || null,
+        uploadedAt: resume.url ? new Date() : null,
+      };
+    }
+
     await user.save();
 
     return res.status(200).json({
@@ -706,5 +766,6 @@ module.exports = {
   logoutAll,
   changePassword,
   getAllUsers,
+  updateUserRole,
   updateProfile,
 };
