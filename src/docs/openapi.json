@@ -7,6 +7,10 @@
   },
   "servers": [
     {
+      "url": "https://node-auth-job-backend.onrender.com/api",
+      "description": "Render deployment"
+    },
+    {
       "url": "http://localhost:4000/api",
       "description": "Local dev"
     }
