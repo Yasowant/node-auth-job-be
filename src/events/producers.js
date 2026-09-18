@@ -1,28 +1,55 @@
+const fs = require("fs");
+const path = require("path");
 const { Kafka } = require("kafkajs");
 
-const kafka = new Kafka({
+// Local dev (Docker Kafka): only KAFKA_BROKER is set (or nothing, defaults
+// to localhost:9092) - plain PLAINTEXT, no auth.
+// Production (Aiven Kafka, free tier): KAFKA_BROKER + KAFKA_USERNAME +
+// KAFKA_PASSWORD are set as Render env vars - SASL_SSL, authenticated,
+// verified against Aiven's CA certificate checked into this repo (it's a
+// public certificate, not a secret - it only lets us verify the server,
+// it grants no access on its own).
+const useSasl = Boolean(process.env.KAFKA_USERNAME && process.env.KAFKA_PASSWORD);
+
+const kafkaConfig = {
   clientId: "node-auth-job-be",
   brokers: [process.env.KAFKA_BROKER || "localhost:9092"],
   retry: {
     retries: 2,
   },
-});
+};
+
+if (useSasl) {
+  kafkaConfig.ssl = {
+    ca: [fs.readFileSync(path.join(__dirname, "..", "config", "certs", "aiven-kafka-ca.pem"), "utf-8")],
+  };
+  kafkaConfig.sasl = {
+    mechanism: "scram-sha-256",
+    username: process.env.KAFKA_USERNAME,
+    password: process.env.KAFKA_PASSWORD,
+  };
+}
+
+const kafka = new Kafka(kafkaConfig);
 
 const producer = kafka.producer();
 
 let isConnected = false;
 
-// Kafka is a local learning add-on for this project - it isn't deployed
-// anywhere in production (e.g. Render). If there's no broker reachable,
-// we log a warning and keep the server running instead of crashing on
-// startup - the REST API + MongoDB work fine without it.
+// Kafka is a local learning add-on for this project. In production
+// (Render) it now points at a free Aiven Kafka cluster over SASL_SSL, but
+// if that's ever unreachable or unset, we log a warning and keep the
+// server running instead of crashing on startup - the REST API + MongoDB
+// work fine without it either way.
 const connectProducer = async () => {
   if (isConnected) return;
 
   try {
     await producer.connect();
     isConnected = true;
-    console.log("Kafka producer connected");
+    console.log(
+      `Kafka producer connected (${useSasl ? "SASL_SSL - Aiven" : "PLAINTEXT - local"})`,
+    );
   } catch (error) {
     console.warn(
       `Kafka producer could not connect (${error.message}). Continuing without Kafka - application events will not be published.`,
