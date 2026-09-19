@@ -892,6 +892,90 @@
         }
       }
     },
+    "/auth/profile/avatar": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Upload a profile photo (multipart, replaces the previous one)",
+        "security": [
+          {
+            "cookieAuth": [],
+            "csrfToken": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "avatar"
+                ],
+                "properties": {
+                  "avatar": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "JPEG, PNG or WebP, up to 5 MB."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Avatar uploaded"
+          },
+          "400": {
+            "description": "No file, wrong type, or file too large"
+          }
+        }
+      }
+    },
+    "/auth/profile/resume": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Upload a resume (multipart, replaces the previous one)",
+        "security": [
+          {
+            "cookieAuth": [],
+            "csrfToken": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "resume"
+                ],
+                "properties": {
+                  "resume": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "PDF or Word document, up to 10 MB."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Resume uploaded"
+          },
+          "400": {
+            "description": "No file, wrong type, or file too large"
+          }
+        }
+      }
+    },
     "/company": {
       "post": {
         "tags": [

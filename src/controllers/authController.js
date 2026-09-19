@@ -4,6 +4,7 @@ const crypto = require("crypto");
 
 const User = require("../models/User");
 const { validateCredentials } = require("../utils/validate");
+const { uploadBuffer } = require("../config/cloudinary");
 
 const {
   generateAccessToken,
@@ -751,6 +752,83 @@ const updateProfile = async (req, res, next) => {
 };
 
 // ======================================================
+// UPLOAD AVATAR
+// ======================================================
+
+const uploadAvatar = async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: "No file uploaded" });
+    }
+
+    const user = await User.findById(req.user.userId);
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const result = await uploadBuffer(req.file.buffer, {
+      folder: "node-auth/avatars",
+      public_id: `user_${user._id}`,
+      resource_type: "image",
+      overwrite: true,
+      transformation: [
+        { width: 512, height: 512, crop: "fill", gravity: "face" },
+      ],
+    });
+
+    user.avatar = result.secure_url;
+    await user.save();
+
+    return res.status(200).json({
+      message: "Avatar uploaded successfully",
+      avatar: user.avatar,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ======================================================
+// UPLOAD RESUME
+// ======================================================
+
+const uploadResume = async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: "No file uploaded" });
+    }
+
+    const user = await User.findById(req.user.userId);
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Resumes are PDFs/Word docs, not images, so Cloudinary has to be told
+    // to store them as a raw asset rather than try to transcode them.
+    const result = await uploadBuffer(req.file.buffer, {
+      folder: "node-auth/resumes",
+      resource_type: "raw",
+    });
+
+    user.resume = {
+      url: result.secure_url,
+      fileName: req.file.originalname,
+      uploadedAt: new Date(),
+    };
+    await user.save();
+
+    return res.status(200).json({
+      message: "Resume uploaded successfully",
+      resume: user.resume,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ======================================================
 // EXPORT
 // ======================================================
 
@@ -768,4 +846,6 @@ module.exports = {
   getAllUsers,
   updateUserRole,
   updateProfile,
+  uploadAvatar,
+  uploadResume,
 };

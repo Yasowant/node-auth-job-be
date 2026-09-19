@@ -14,6 +14,8 @@ const {
   getAllUsers,
   updateUserRole,
   updateProfile,
+  uploadAvatar,
+  uploadResume,
 } = require("../controllers/authController");
 const authMiddleware = require("../middleware/authMiddleware");
 const authorizeRoles = require("../middleware/roleMiddleware");
@@ -21,6 +23,10 @@ const {
   loginLimiter,
   passwordResetLimiter,
 } = require("../middleware/rateLimitMiddleware");
+const {
+  avatarUpload,
+  resumeUpload,
+} = require("../middleware/uploadMiddleware");
 
 router.post("/register", register);
 router.post("/login", loginLimiter, login);
@@ -39,5 +45,17 @@ router.patch(
   updateUserRole,
 );
 router.put("/profile", authMiddleware, updateProfile);
+router.post(
+  "/profile/avatar",
+  authMiddleware,
+  avatarUpload,
+  uploadAvatar,
+);
+router.post(
+  "/profile/resume",
+  authMiddleware,
+  resumeUpload,
+  uploadResume,
+);
 
 module.exports = router;
