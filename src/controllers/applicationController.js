@@ -123,7 +123,7 @@ const getMyApplications = async (req, res, next) => {
 
 const getApplicantsForJob = async (req, res, next) => {
   try {
-    const job = await job.findById(req, URLSearchParams.jobId);
+    const job = await Job.findById(req.params.jobId);
 
     if (!job) {
       return res.status(404).json({

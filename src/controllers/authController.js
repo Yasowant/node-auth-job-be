@@ -708,9 +708,10 @@ const updateProfile = async (req, res, next) => {
       user.noticePeriod = noticePeriod;
     }
 
-    // Resume as a URL the candidate pastes in (e.g. a link to a hosted PDF) -
-    // there's no file upload endpoint yet, so this is deliberately just a
-    // link + filename, not a binary upload.
+    // The real upload path is POST /auth/profile/resume (uploadResume,
+    // below), which writes user.resume itself from a verified Cloudinary
+    // result. This PUT path is kept only so a client can clear the resume
+    // ({ url: null }) or paste an external link instead of uploading.
     if (resume !== undefined) {
       user.resume = {
         url: resume.url || null,
