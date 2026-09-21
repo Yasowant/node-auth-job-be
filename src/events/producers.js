@@ -1,6 +1,6 @@
 const fs = require("fs");
 const path = require("path");
-const { Kafka } = require("kafkajs");
+const { Kafka, Partitioners } = require("kafkajs");
 
 // Local dev (Docker Kafka): only KAFKA_BROKER is set (or nothing, defaults
 // to localhost:9092) - plain PLAINTEXT, no auth.
@@ -32,7 +32,14 @@ if (useSasl) {
 
 const kafka = new Kafka(kafkaConfig);
 
-const producer = kafka.producer();
+// Explicit, not the implicit default -- this is a fresh app with no
+// old partitioning to stay compatible with, so there's no reason to
+// reach for the legacy partitioner. Passing this instead of leaving it
+// unset is what stops KafkaJS's own "you're relying on our default"
+// warning from firing on every producer.connect().
+const producer = kafka.producer({
+  createPartitioner: Partitioners.DefaultPartitioner,
+});
 
 let isConnected = false;
 
