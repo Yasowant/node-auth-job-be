@@ -1,12 +1,12 @@
 name: CD
 
-# Render watches this repository and redeploys itself on every push to main.
-# This workflow runs the test suite and then confirms the new version
-# actually came up healthy.
+# Render watches this repository and redeploys on pushes to main.
+# This workflow runs CI and then verifies the Render deployment.
 
 on:
   push:
     branches: [main]
+
   workflow_dispatch:
 
 concurrency:
@@ -17,6 +17,7 @@ jobs:
   ci:
     name: CI
     uses: ./.github/workflows/ci.yml
+    secrets: inherit
 
   verify:
     name: Verify the live deployment
@@ -24,25 +25,31 @@ jobs:
     needs: ci
 
     steps:
-      - name: Wait for Render and check /health
+      - name: Wait for Render and check health
         env:
-          # Override by setting a repository variable named RENDER_URL.
-          # Settings > Secrets and variables > Actions > Variables.
+          # Optional repository variable:
+          # Settings → Secrets and variables → Actions → Variables
           BASE_URL: ${{ vars.RENDER_URL || 'https://node-auth-job-backend.onrender.com' }}
 
         shell: bash
         run: |
           set -euo pipefail
 
+          BASE_URL="${BASE_URL%/}"
+
           echo "Checking $BASE_URL/health"
-          echo "Render builds take a few minutes; free instances also cold start."
+          echo "Render builds can take several minutes."
+          echo "Free instances may also cold start."
 
           for attempt in $(seq 1 24); do
-            body=$(curl -fsS \
-              --max-time 60 \
-              "$BASE_URL/health" 2>/dev/null || echo "")
+            body=$(
+              curl -fsS \
+                --max-time 60 \
+                "$BASE_URL/health" \
+                2>/dev/null || true
+            )
 
-            if echo "$body" | grep -q '"status":"ok"'; then
+            if echo "$body" | jq -e '.status == "ok"' >/dev/null 2>&1; then
               echo ""
               echo "Live and healthy on attempt $attempt:"
               echo "$body"
@@ -52,23 +59,32 @@ jobs:
                 echo "### Deployment verified"
                 echo ""
                 echo "- URL: $BASE_URL"
-                echo "- Health: \`$body\`"
+                echo "- Health response:"
+                echo '```json'
+                echo "$body"
+                echo '```'
               } >> "$GITHUB_STEP_SUMMARY"
 
               exit 0
             fi
 
-            if echo "$body" | grep -q '"database":"disconnected"'; then
-              echo "Attempt $attempt: app is up but cannot reach MongoDB."
-            elif echo "$body" | grep -q '"redis":"disconnected"'; then
-              echo "Attempt $attempt: app is up but cannot reach Redis."
+            if echo "$body" | jq -e '.database == "disconnected"' >/dev/null 2>&1; then
+              echo "Attempt $attempt: MongoDB is disconnected."
+
+            elif echo "$body" | jq -e '.redis == "disconnected"' >/dev/null 2>&1; then
+              echo "Attempt $attempt: Redis is disconnected."
+
+            elif [ -n "$body" ]; then
+              echo "Attempt $attempt: API responded but is not healthy."
+              echo "$body"
+
             else
-              echo "Attempt $attempt: not ready yet."
+              echo "Attempt $attempt: API is not responding yet."
             fi
 
             sleep 30
           done
 
           echo "::error::$BASE_URL/health did not report healthy within 12 minutes."
-          echo "Check the Render dashboard logs for this service."
+          echo "Check Render deployment logs."
           exit 1
