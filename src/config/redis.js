@@ -1,40 +1,34 @@
-const { createClient } = require("redis");
+const { Redis } = require("@upstash/redis");
 
-const redisClient = createClient({
-  url: process.env.REDIS_URL || "redis://localhost:6379",
-});
+const redisUrl = process.env.UPSTASH_REDIS_REST_URL;
+const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN;
 
-redisClient.on("error", (error) => {
-  console.error("Redis Client Error:", error.message);
-});
+if (!redisUrl || !redisToken) {
+  throw new Error(
+    "UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are required",
+  );
+}
 
-redisClient.on("connect", () => {
-  console.log("Redis connecting...");
-});
-
-redisClient.on("ready", () => {
-  console.log("Redis ready");
-});
-
-redisClient.on("end", () => {
-  console.log("Redis connection closed");
+const redisClient = new Redis({
+  url: redisUrl,
+  token: redisToken,
 });
 
 const connectRedis = async () => {
-  if (redisClient.isOpen) {
-    return;
+  try {
+    await redisClient.set("redis:health", "ok", { ex: 60 });
+
+    console.log("Redis connected successfully");
+  } catch (error) {
+    console.error("Redis connection failed:", error.message);
+    throw error;
   }
-  await redisClient.connect();
-  console.log("Redis Connected successfully");
 };
 
 const disconnectRedis = async () => {
-  if (!redisClient.isOpen) {
-    return;
-  }
-
-  await redisClient.quit();
-  console.log("Redis DisConnected");
+  // Upstash REST uses HTTP requests.
+  // No persistent Redis connection needs to be closed.
+  console.log("Redis disconnected");
 };
 
 module.exports = {
