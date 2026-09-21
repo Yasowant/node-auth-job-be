@@ -68,7 +68,7 @@ const disconnectProducer = async () => {
  * Publish one event onto a topic. `key` (optional) keeps related events -
  * e.g. every event for the same applicationId - ordered on one partition.
  * No-ops (with a warning) if Kafka isn't connected, so callers like
- * applyToJob never fail a real request just because Kafka is unavailable.
+ * applyToJob never fail a real request just because Kafka is unavailable
  */
 const publishEvent = async (topic, payload, key) => {
   if (!isConnected) {
