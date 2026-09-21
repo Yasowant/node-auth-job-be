@@ -1,3 +1,4 @@
+
 services:
   kafka:
     image: apache/kafka:3.8.0
@@ -33,5 +34,17 @@ services:
     depends_on:
       - kafka
 
+  # Redis service
+  redis:
+    image: redis:7-alpine
+    container_name: node-auth-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    restart: unless-stopped
+
 volumes:
   kafka-data:
+  redis-data:
