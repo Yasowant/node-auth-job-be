@@ -5,6 +5,11 @@ const crypto = require("crypto");
 const User = require("../models/User");
 const { validateCredentials } = require("../utils/validate");
 const { uploadBuffer } = require("../config/cloudinary");
+const { redisClient } = require("../config/redis");
+const {
+  getUsersCacheVersion,
+  invalidateUsersCache,
+} = require("../utils/userCache");
 
 const {
   generateAccessToken,
@@ -173,7 +178,9 @@ const login = async (req, res, next) => {
 
 const getMe = async (req, res, next) => {
   try {
-    const user = await User.findById(req.user.userId).select(PRIVATE_USER_FIELDS);
+    const user = await User.findById(req.user.userId).select(
+      PRIVATE_USER_FIELDS,
+    );
 
     if (!user) {
       return res.status(404).json({
@@ -195,7 +202,9 @@ const getMe = async (req, res, next) => {
 
 const getProfile = async (req, res, next) => {
   try {
-    const user = await User.findById(req.user.userId).select(PRIVATE_USER_FIELDS);
+    const user = await User.findById(req.user.userId).select(
+      PRIVATE_USER_FIELDS,
+    );
 
     if (!user) {
       return res.status(404).json({
@@ -529,16 +538,46 @@ const changePassword = async (req, res, next) => {
 const getAllUsers = async (req, res, next) => {
   try {
     const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
-    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
+
+    const limit = Math.min(
+      Math.max(parseInt(req.query.limit, 10) || 20, 1),
+      100,
+    );
+
+    // 1. Get the current cache version
+    const version = await getUsersCacheVersion();
+
+    // 2. Create a version-based cache key
+    const cacheKey = `users:v${version}:page:${page}:limit:${limit}`;
+
+    // 3. Check Redis cache
+    const cachedData = await redisClient.get(cacheKey);
+
+    if (cachedData) {
+      console.log(`Users cache HIT: ${cacheKey}`);
+
+      return res.status(200).json({
+        ...cachedData,
+        cached: true,
+      });
+    }
+
+    console.log(`Users cache MISS: ${cacheKey}`);
+
+    // 4. Fetch data from MongoDB
     const [users, total] = await Promise.all([
       User.find()
         .select(PRIVATE_USER_FIELDS)
         .sort({ createdAt: -1 })
         .skip((page - 1) * limit)
-        .limit(limit),
+        .limit(limit)
+        .lean(),
+
       User.countDocuments(),
     ]);
-    return res.status(200).json({
+
+    // 5. Create response data
+    const responseData = {
       message: "Users fetched successfully",
       count: users.length,
       page,
@@ -546,6 +585,19 @@ const getAllUsers = async (req, res, next) => {
       total,
       totalPages: Math.ceil(total / limit),
       users,
+    };
+
+    // 6. Save response in Redis for 60 seconds
+    await redisClient.set(cacheKey, responseData, {
+      ex: 60,
+    });
+
+    console.log(`Users cached: ${cacheKey}`);
+
+    // 7. Return response
+    return res.status(200).json({
+      ...responseData,
+      cached: false,
     });
   } catch (error) {
     next(error);
