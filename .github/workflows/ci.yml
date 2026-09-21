@@ -1,11 +1,18 @@
 name: CI
 
-# No push trigger: cd.yml calls this workflow on every push to main.
 # Pull requests run CI directly.
+# CD calls this workflow on every push to main.
+
 on:
   pull_request:
     branches: [main]
+
   workflow_call:
+    secrets:
+      UPSTASH_REDIS_REST_URL_TEST:
+        required: true
+      UPSTASH_REDIS_REST_TOKEN_TEST:
+        required: true
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -21,7 +28,6 @@ jobs:
       matrix:
         node-version: [20.x, 22.x]
 
-    # MongoDB and Redis services for integration tests.
     services:
       mongo:
         image: mongo:7
@@ -33,20 +39,13 @@ jobs:
           --health-timeout 5s
           --health-retries 10
 
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 10
-
     env:
       NODE_ENV: test
       MONGO_URI_TEST: mongodb://127.0.0.1:27017/node_auth_test
-      REDIS_URL: redis://127.0.0.1:6379
+
+      # Upstash Redis test database
+      UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL_TEST }}
+      UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN_TEST }}
 
     steps:
       - name: Check out the repository
@@ -76,7 +75,7 @@ jobs:
           retention-days: 7
 
   docker:
-    name: Build Docker image
+    name: Build and smoke test Docker image
     runs-on: ubuntu-latest
     needs: test
 
@@ -87,7 +86,7 @@ jobs:
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build image (no push)
+      - name: Build image
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -97,85 +96,139 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Verify the image boots and serves /health
+      - name: Verify Docker image
         shell: bash
+        env:
+          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL_TEST }}
+          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN_TEST }}
         run: |
           set -euo pipefail
 
           docker network create ci-net
 
           cleanup() {
-            docker rm -f api mongo redis 2>/dev/null || true
+            docker rm -f api mongo kafka 2>/dev/null || true
             docker network rm ci-net 2>/dev/null || true
           }
 
           trap cleanup EXIT
 
+          # -----------------------------------------
           # Start MongoDB
+          # -----------------------------------------
+          echo "Starting MongoDB..."
+
           docker run -d \
             --name mongo \
             --network ci-net \
             mongo:7
 
-          # Start Redis
+          # -----------------------------------------
+          # Start Kafka
+          # -----------------------------------------
+          echo "Starting Kafka..."
+
           docker run -d \
-            --name redis \
+            --name kafka \
             --network ci-net \
-            redis:7-alpine \
-            redis-server --appendonly yes
+            -e KAFKA_NODE_ID=1 \
+            -e KAFKA_PROCESS_ROLES=broker,controller \
+            -e KAFKA_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093 \
+            -e KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092 \
+            -e KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER \
+            -e KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT \
+            -e KAFKA_CONTROLLER_QUORUM_VOTERS=1@kafka:9093 \
+            -e KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1 \
+            -e CLUSTER_ID=MkU3OEVBNTcwNTJENDM2Qk \
+            apache/kafka:3.8.0
 
-          # Wait for MongoDB and Redis
-          for i in $(seq 1 30); do
-            mongo_ready=$(docker exec mongo \
-              mongosh --quiet --eval \
-              "db.runCommand({ ping: 1 }).ok" 2>/dev/null || true)
+          # -----------------------------------------
+          # Wait for MongoDB and Kafka
+          # -----------------------------------------
+          echo "Waiting for MongoDB and Kafka..."
 
-            redis_ready=$(docker exec redis \
-              redis-cli ping 2>/dev/null || true)
+          for i in $(seq 1 45); do
+            mongo_ready=$(
+              docker exec mongo \
+                mongosh --quiet --eval \
+                "db.runCommand({ ping: 1 }).ok" \
+                2>/dev/null || true
+            )
+
+            kafka_ready=$(
+              docker exec kafka \
+                /opt/kafka/bin/kafka-broker-api-versions.sh \
+                --bootstrap-server localhost:9092 \
+                >/dev/null 2>&1 \
+                && echo "ready" || true
+            )
 
             if [ "$mongo_ready" = "1" ] && \
-               [ "$redis_ready" = "PONG" ]; then
-              echo "MongoDB and Redis are ready"
+               [ "$kafka_ready" = "ready" ]; then
+              echo "MongoDB and Kafka are ready"
               break
             fi
 
-            if [ "$i" -eq 30 ]; then
-              echo "MongoDB or Redis failed to become ready"
+            if [ "$i" -eq 45 ]; then
+              echo "MongoDB or Kafka failed to become ready"
+
+              echo "MongoDB logs:"
               docker logs mongo
-              docker logs redis
+
+              echo "Kafka logs:"
+              docker logs kafka
+
               exit 1
             fi
 
             sleep 2
           done
 
+          # -----------------------------------------
           # Start API
+          # -----------------------------------------
+          echo "Starting API..."
+
           docker run -d \
             --name api \
             --network ci-net \
             -p 4000:4000 \
             -e NODE_ENV=production \
             -e PORT=4000 \
-            -e MONGO_URI="mongodb://mongo:27017/smoke" \
-            -e REDIS_URL="redis://redis:6379" \
-            -e JWT_ACCESS_SECRET=ci_only \
-            -e JWT_REFRESH_SECRET=ci_only \
+            -e MONGO_URI=mongodb://mongo:27017/smoke \
+            -e KAFKA_BROKER=kafka:9092 \
+            -e UPSTASH_REDIS_REST_URL="$UPSTASH_REDIS_REST_URL" \
+            -e UPSTASH_REDIS_REST_TOKEN="$UPSTASH_REDIS_REST_TOKEN" \
+            -e JWT_ACCESS_SECRET=ci_only_access_secret \
+            -e JWT_REFRESH_SECRET=ci_only_refresh_secret \
             -e ACCESS_TOKEN_EXPIRES_IN=15m \
             -e REFRESH_TOKEN_EXPIRES_IN=7d \
             node-auth-job-be:ci
 
+          # -----------------------------------------
           # Wait for API health
-          for i in $(seq 1 30); do
-            if curl -fsS --max-time 5 \
-              http://localhost:4000/health; then
+          # -----------------------------------------
+          echo "Waiting for API health..."
 
-              echo "Image healthy"
+          for i in $(seq 1 40); do
+            body=$(
+              curl -fsS \
+                --max-time 5 \
+                http://localhost:4000/health \
+                2>/dev/null || true
+            )
+
+            if echo "$body" | jq -e '.status == "ok"' >/dev/null 2>&1; then
+              echo "Image healthy:"
+              echo "$body"
               exit 0
             fi
 
+            echo "Attempt $i: API is not healthy yet"
             sleep 3
           done
 
           echo "Image failed health check"
           docker logs api
+
           exit 1
