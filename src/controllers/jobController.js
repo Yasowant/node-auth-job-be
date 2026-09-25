@@ -2,6 +2,7 @@ const crypto = require("crypto");
 
 const Job = require("../models/Jobs");
 const Company = require("../models/Company");
+const { buildJobQueryPlan } = require("../utils/queryPlanner");
 
 /**
  * Build a URL-safe slug from a title, with a short random suffix so two
@@ -96,27 +97,12 @@ const createJob = async (req, res, next) => {
 
 const getAllJobs = async (req, res, next) => {
   try {
-    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
-    const limit = Math.min(parseInt(req.query.limit, 10) || 20, 100);
-
-    const filter = { status: "ACTIVE" };
-
-    if (req.query.workMode) {
-      filter.workMode = req.query.workMode;
-    }
-
-    if (req.query.employmentType) {
-      filter.employmentType = req.query.employmentType;
-    }
-
-    if (req.query.q) {
-      filter.$text = { $search: req.query.q };
-    }
+    const { filter, sort, page, limit } = buildJobQueryPlan(req.query);
 
     const [jobs, total] = await Promise.all([
       Job.find(filter)
         .populate("company", "name logo verified")
-        .sort({ publishedAt: -1 })
+        .sort(sort)
         .skip((page - 1) * limit)
         .limit(limit),
       Job.countDocuments(filter),
