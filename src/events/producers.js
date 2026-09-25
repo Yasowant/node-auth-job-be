@@ -9,7 +9,9 @@ const { Kafka, Partitioners } = require("kafkajs");
 // verified against Aiven's CA certificate checked into this repo (it's a
 // public certificate, not a secret - it only lets us verify the server,
 // it grants no access on its own).
-const useSasl = Boolean(process.env.KAFKA_USERNAME && process.env.KAFKA_PASSWORD);
+const useSasl = Boolean(
+  process.env.KAFKA_USERNAME && process.env.KAFKA_PASSWORD,
+);
 
 const kafkaConfig = {
   clientId: "node-auth-job-be",
@@ -21,7 +23,12 @@ const kafkaConfig = {
 
 if (useSasl) {
   kafkaConfig.ssl = {
-    ca: [fs.readFileSync(path.join(__dirname, "..", "config", "certs", "aiven-kafka-ca.pem"), "utf-8")],
+    ca: [
+      fs.readFileSync(
+        path.join(__dirname, "..", "config", "certs", "aiven-kafka-ca.pem"),
+        "utf-8",
+      ),
+    ],
   };
   kafkaConfig.sasl = {
     mechanism: "scram-sha-256",
