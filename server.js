@@ -11,6 +11,11 @@ const {
   disconnectProducer,
 } = require("./src/events/producers");
 
+const {
+  connectConsumer,
+  disconnectConsumer,
+} = require("./src/events/consumer");
+
 const PORT = process.env.PORT || 4000;
 
 let server;
@@ -25,6 +30,7 @@ const startServer = async () => {
 
     // 3. Connect Kafka Producer
     await connectProducer();
+    await connectConsumer();
 
     // 4. Start Express Server
     server = app.listen(PORT, () => {
@@ -62,6 +68,7 @@ const shutdown = async (signal) => {
     });
   }
 
+  await disconnectConsumer();
   await disconnectProducer();
   await disconnectRedis();
   await disconnectDB();

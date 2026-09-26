@@ -205,6 +205,21 @@ const updateApplicationStatus = async (req, res, next) => {
 
     await application.save();
 
+    await publishEvent(
+      TOPICS.APPLICATION_EVENTS,
+      {
+        type: "application.status_changed",
+        applicationId: application._id,
+        jobId: application.job._id,
+        applicantId: application.applicant,
+        companyId: application.company,
+        status,
+        changedBy: req.user.userId,
+        changedAt: new Date(),
+      },
+      application._id,
+    );
+
     return res.status(200).json({
       message: "Application status updated successfully",
       application,
@@ -244,6 +259,21 @@ const withdrawApplication = async (req, res, next) => {
     });
 
     await application.save();
+
+    await publishEvent(
+      TOPICS.APPLICATION_EVENTS,
+      {
+        type: "application.status_changed",
+        applicationId: application._id,
+        jobId: application.job,
+        applicantId: application.applicant,
+        companyId: application.company,
+        status: "WITHDRAWN",
+        changedBy: req.user.userId,
+        changedAt: new Date(),
+      },
+      application._id,
+    );
 
     return res.status(200).json({
       message: "Application withdrawn successfully",
