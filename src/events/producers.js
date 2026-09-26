@@ -101,4 +101,4 @@ const publishEvent = async (topic, payload, key) => {
   });
 };
 
-module.exports = { connectProducer, disconnectProducer, publishEvent };
+module.exports = { kafka, connectProducer, disconnectProducer, publishEvent };

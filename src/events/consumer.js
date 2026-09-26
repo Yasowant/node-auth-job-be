@@ -19,14 +19,14 @@ const STATUS_COPY = {
 };
 
 const buildNotification = async (event) => {
-  if (String(event.changedBy) === String(event.applicationId)) return null;
+  if (String(event.changedBy) === String(event.applicantId)) return null;
 
   const job = await Job.findById(event.jobId).select("title");
   const jobTitle = job?.title ?? "a job";
   const copy = STATUS_COPY[event.status] ?? `changed to ${event.status}`;
 
   return {
-    recipient: event.applicationId,
+    recipient: event.applicantId,
     type: "APPLICATION_STATUS_CHANGED",
     title: "Application update",
     message: `Your application for ${jobTitle} ${copy}`,
@@ -81,10 +81,10 @@ const connectConsumer = async () => {
   }
 };
 
-const disConnectConsumer = async () => {
+const disconnectConsumer = async () => {
   if (!isConnected) return;
   await consumer.disconnect();
   isConnected = false;
 };
 
-module.exports = { connectConsumer, disConnectConsumer };
+module.exports = { connectConsumer, disconnectConsumer };
