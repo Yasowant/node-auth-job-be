@@ -3,7 +3,7 @@
   "info": {
     "title": "node-auth-job-be API",
     "version": "1.0.0",
-    "description": "JWT authentication + job-board REST API.\n\n**Before any POST/PUT/PATCH/DELETE will work here:**\n1. Call `GET /csrf-token` once (below) \u2014 this sets a `csrfToken` cookie and returns the same value in the response body.\n2. Click the lock icon or the row's header, then use the `X-CSRF-Token` header field on the request and paste that value in.\n3. This page is served from `http://localhost:4000`, so the `Origin` header the browser sends will be `http://localhost:4000`. Your `.env` `CLIENT_URL` must match that for CSRF checks to pass when testing from here \u2014 set `CLIENT_URL=http://localhost:4000` in `.env` while using this page, then change it back for your real frontend.\n4. Login/register set an `httpOnly` cookie automatically; since this page is same-origin, that cookie is sent on every later request without any extra setup."
+    "description": "JWT authentication + job-board REST API.\n\n**Before any POST/PUT/PATCH/DELETE will work here:**\n1. Call `GET /csrf-token` once (below) — this sets a `csrfToken` cookie and returns the same value in the response body.\n2. Click the lock icon or the row's header, then use the `X-CSRF-Token` header field on the request and paste that value in.\n3. This page is served from `http://localhost:4000`, so the `Origin` header the browser sends will be `http://localhost:4000`. Your `.env` `CLIENT_URL` must match that for CSRF checks to pass when testing from here — set `CLIENT_URL=http://localhost:4000` in `.env` while using this page, then change it back for your real frontend.\n4. Login/register set an `httpOnly` cookie automatically; since this page is same-origin, that cookie is sent on every later request without any extra setup."
   },
   "servers": [
     {
@@ -405,6 +405,10 @@
     {
       "name": "Applications",
       "description": "Candidates applying to jobs"
+    },
+    {
+      "name": "Notifications",
+      "description": "In-app notifications for candidates"
     }
   ],
   "paths": {
@@ -1681,11 +1685,11 @@
           "201": {
             "description": "Application submitted"
           },
-          "409": {
-            "description": "Already applied"
-          },
           "400": {
             "description": "No resume on profile, or job not active"
+          },
+          "409": {
+            "description": "Already applied"
           }
         }
       }
@@ -1920,6 +1924,104 @@
           },
           "404": {
             "description": "User not found"
+          }
+        }
+      }
+    },
+    "/notifications": {
+      "get": {
+        "tags": [
+          "Notifications"
+        ],
+        "summary": "My notifications (USER)",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 20
+            }
+          },
+          {
+            "name": "read",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Filter to only read (true) or unread (false) notifications"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated notifications, includes unreadCount"
+          }
+        }
+      }
+    },
+    "/notifications/read-all": {
+      "patch": {
+        "tags": [
+          "Notifications"
+        ],
+        "summary": "Mark all my notifications as read (USER)",
+        "security": [
+          {
+            "cookieAuth": [],
+            "csrfToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "All notifications marked as read"
+          }
+        }
+      }
+    },
+    "/notifications/{id}/read": {
+      "patch": {
+        "tags": [
+          "Notifications"
+        ],
+        "summary": "Mark a notification as read (USER, recipient only)",
+        "security": [
+          {
+            "cookieAuth": [],
+            "csrfToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Notification marked as read"
+          },
+          "403": {
+            "description": "Not your notification"
+          },
+          "404": {
+            "description": "Notification not found"
           }
         }
       }
