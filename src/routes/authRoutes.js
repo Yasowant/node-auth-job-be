@@ -13,6 +13,7 @@ const {
   changePassword,
   getAllUsers,
   updateUserRole,
+  becomeRecruiter,
   updateProfile,
   uploadAvatar,
   uploadResume,
@@ -44,6 +45,7 @@ router.patch(
   authorizeRoles("ADMIN"),
   updateUserRole,
 );
+router.patch("/become-recruiter", authMiddleware, becomeRecruiter);
 router.put("/profile", authMiddleware, updateProfile);
 router.post(
   "/profile/avatar",

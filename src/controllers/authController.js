@@ -653,6 +653,49 @@ const updateUserRole = async (req, res, next) => {
 };
 
 // ======================================================
+// BECOME A RECRUITER (self-serve, USER only)
+// ======================================================
+
+const becomeRecruiter = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user.userId);
+
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found",
+      });
+    }
+
+    if (user.role !== "USER") {
+      return res.status(400).json({
+        message: `Only candidate accounts can become a recruiter (current role: ${user.role})`,
+      });
+    }
+
+    user.role = "RECRUITER";
+
+    // Unlike updateUserRole (admin changing someone else's role), this is
+    // the user acting on their own account in their own current session --
+    // and authMiddleware always reads role fresh from the DB rather than
+    // trusting the JWT claim, so there's no stale-permission window here
+    // and no need to bump tokenVersion or force a re-login.
+    await user.save();
+
+    return res.status(200).json({
+      message: "You're now a recruiter",
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ======================================================
 // UPDATE PROFILE
 // ======================================================
 
@@ -898,6 +941,7 @@ module.exports = {
   changePassword,
   getAllUsers,
   updateUserRole,
+  becomeRecruiter,
   updateProfile,
   uploadAvatar,
   uploadResume,
