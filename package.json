@@ -29,6 +29,7 @@
     "kafkajs": "^2.2.4",
     "mongoose": "^9.9.4",
     "multer": "^2.4.0",
+    "openai": "^7.23.0",
     "redis": "^6.2.1",
     "swagger-ui-express": "^5.0.1"
   },
