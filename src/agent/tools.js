@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const Job = require("../models/Jobs");
 const Application = require("../models/Application");
 const { buildJobQueryPlan } = require("../utils/queryPlanner");
+const config = require("./config");
 
 const isId = (id) => mongoose.Types.ObjectId.isValid(id);
 
@@ -13,92 +14,80 @@ const formatSalary = (s) =>
     ? { min: s.min, max: s.max, currency: s.currency, period: s.period }
     : "Not disclosed";
 
-// ---- What the model sees ---------------------------------------------------
+// ---- What the model sees (Anthropic tool format) ---------------------------
 const definitions = [
   {
-    type: "function",
-    function: {
-      name: "search_jobs",
-      description:
-        "Search ACTIVE jobs on the board. Use for any request to find, list or filter jobs.",
-      parameters: {
-        type: "object",
-        properties: {
-          keyword: {
+    name: "search_jobs",
+    description:
+      "Search ACTIVE jobs on the board. Use for any request to find, list or filter jobs.",
+    input_schema: {
+      type: "object",
+      properties: {
+        keyword: {
+          type: "string",
+          description: "Role, skill or title, e.g. 'angular developer'",
+        },
+        location: { type: "string", description: "City, state or country" },
+        workMode: {
+          type: "array",
+          items: { type: "string", enum: ["REMOTE", "HYBRID", "ONSITE"] },
+        },
+        employmentType: {
+          type: "array",
+          items: {
             type: "string",
-            description: "Role, skill or title, e.g. 'angular developer'",
-          },
-          location: { type: "string", description: "City, state or country" },
-          workMode: {
-            type: "array",
-            items: { type: "string", enum: ["REMOTE", "HYBRID", "ONSITE"] },
-          },
-          employmentType: {
-            type: "array",
-            items: {
-              type: "string",
-              enum: ["FULL_TIME", "PART_TIME", "CONTRACT", "INTERNSHIP"],
-            },
-          },
-          level: {
-            type: "array",
-            description:
-              "Experience bands: entry = 0-1 yrs, mid = 2-5 yrs, senior = 6+ yrs",
-            items: { type: "string", enum: ["entry", "mid", "senior"] },
-          },
-          limit: {
-            type: "number",
-            description: "Max results, default 5, max 10",
+            enum: ["FULL_TIME", "PART_TIME", "CONTRACT", "INTERNSHIP"],
           },
         },
-        additionalProperties: false,
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "get_job_details",
-      description:
-        "Full details of one job (description, requirements, screening questions).",
-      parameters: {
-        type: "object",
-        properties: { jobId: { type: "string" } },
-        required: ["jobId"],
-        additionalProperties: false,
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "get_my_applications",
-      description: "The current user's applications and their statuses.",
-      parameters: {
-        type: "object",
-        properties: {},
-        additionalProperties: false,
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "propose_application",
-      description:
-        "Propose applying to a job. This does NOT apply - the user must confirm with a button.",
-      parameters: {
-        type: "object",
-        properties: {
-          jobId: { type: "string" },
-          reason: {
-            type: "string",
-            description: "One sentence on why this job fits the user",
-          },
+        level: {
+          type: "array",
+          description:
+            "Experience bands: entry = 0-1 yrs, mid = 2-5 yrs, senior = 6+ yrs",
+          items: { type: "string", enum: ["entry", "mid", "senior"] },
         },
-        required: ["jobId"],
-        additionalProperties: false,
+        limit: {
+          type: "integer",
+          description: "Max results, default 5",
+        },
       },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "get_job_details",
+    description:
+      "Full details of one job (description, requirements, screening questions).",
+    input_schema: {
+      type: "object",
+      properties: { jobId: { type: "string" } },
+      required: ["jobId"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "get_my_applications",
+    description: "The current user's applications and their statuses.",
+    input_schema: {
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "propose_application",
+    description:
+      "Propose applying to a job. This does NOT apply - the user must confirm with a button.",
+    input_schema: {
+      type: "object",
+      properties: {
+        jobId: { type: "string" },
+        reason: {
+          type: "string",
+          description: "One sentence on why this job fits the user",
+        },
+      },
+      required: ["jobId"],
+      additionalProperties: false,
     },
   },
 ];
@@ -107,7 +96,7 @@ const definitions = [
 // ctx = { userId, proposals }
 const handlers = {
   async search_jobs(args) {
-    const limit = Math.min(Math.max(args.limit || 5, 1), 10);
+    const limit = Math.min(Math.max(args.limit || 5, 1), config.maxRows);
     // Reuse the same planner as GET /api/jobs so search behaves identically.
     const { filter, sort } = buildJobQueryPlan({
       keyword: args.keyword,
