@@ -15,6 +15,9 @@ const model = process.env.ANTHROPIC_MODEL || "claude-haiku-4-5-20251001";
 
 module.exports = {
   model,
+  // Required only for keys that are NOT scoped to a workspace (Console >
+  // Settings > Workspaces). Sent as the anthropic-workspace-id header.
+  workspaceId: process.env.ANTHROPIC_WORKSPACE_ID || null,
   // Tried in order if the main model is overloaded / unavailable.
   fallbackModels: list("ANTHROPIC_FALLBACK_MODELS").filter((m) => m !== model),
   maxTokens: int("AI_ASSISTANT_MAX_TOKENS", 1024),
