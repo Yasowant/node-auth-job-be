@@ -170,6 +170,9 @@ const jobSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    embedding: { type: [Number], select: false },
+    // Hash of the text we embedded - skip re-embedding if nothing changed.
+    embeddingHash: { type: String, select: false },
 
     publishedAt: {
       type: Date,

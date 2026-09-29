@@ -2099,7 +2099,7 @@
           "AI Assistant"
         ],
         "summary": "Chat with the AI job assistant (USER)",
-        "description": "Runs an agent loop on Claude: the model can call tools (search_jobs, get_job_details, get_my_applications, propose_application) against the database before replying. Stateless: send the whole conversation each time; it must end with a user message. Only the most recent AI_ASSISTANT_HISTORY messages (2000 chars each) are used. Rate-limited to 10 requests/minute per user.",
+        "description": "Runs an agent loop on Claude: the model can call tools (search_jobs, semantic_search_jobs, match_jobs_to_my_profile, get_job_details, get_my_applications, propose_application) against the database before replying. Stateless: send the whole conversation each time; it must end with a user message. Only the most recent AI_ASSISTANT_HISTORY messages (2000 chars each) are used. Rate-limited to 10 requests/minute per user. semantic_search_jobs / match_jobs_to_my_profile are RAG tools: Voyage AI embeddings + MongoDB Atlas Vector Search (require VOYAGE_API_KEY; run `npm run embed:jobs` once).",
         "security": [
           {
             "cookieAuth": [],

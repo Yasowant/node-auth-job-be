@@ -3,6 +3,14 @@ const crypto = require("crypto");
 const Job = require("../models/Jobs");
 const Company = require("../models/Company");
 const { buildJobQueryPlan } = require("../utils/queryPlanner");
+const { refreshJobEmbedding } = require("../agent/jobEmbeddings");
+
+// RAG: keep the job's vector in sync. Deliberately not awaited - a recruiter's
+// request must never wait on, or fail because of, the embeddings API.
+const syncEmbedding = (jobId) =>
+  refreshJobEmbedding(jobId).catch((err) =>
+    console.warn("[rag] embedding failed for job", String(jobId), "-", err.message),
+  );
 
 /**
  * Build a URL-safe slug from a title, with a short random suffix so two
@@ -81,6 +89,8 @@ const createJob = async (req, res, next) => {
       publishedAt: publish ? new Date() : null,
       expiresAt: expiresAt || null,
     });
+
+    syncEmbedding(job._id);
 
     return res.status(201).json({
       message: "Job created successfully",
@@ -233,6 +243,7 @@ const updateJob = async (req, res, next) => {
     }
 
     await job.save();
+    syncEmbedding(job._id);
 
     return res.status(200).json({
       message: "Job updated successfully",

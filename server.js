@@ -16,6 +16,8 @@ const {
   disconnectConsumer,
 } = require("./src/events/consumer");
 
+const { syncAllJobEmbeddings } = require("./src/agent/jobEmbeddings");
+
 const PORT = process.env.PORT || 4000;
 
 let server;
@@ -35,6 +37,12 @@ const startServer = async () => {
     // 4. Start Express Server
     server = app.listen(PORT, () => {
       console.log(`Server running on http://localhost:${PORT}`);
+
+      // 5. RAG: create the vector index + embed new/changed jobs in the
+      // background. Not awaited - the API is already serving requests.
+      syncAllJobEmbeddings().catch((err) =>
+        console.warn("[rag] background sync failed:", err.message),
+      );
     });
 
     server.on("error", (error) => {

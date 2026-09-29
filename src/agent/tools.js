@@ -3,6 +3,9 @@ const Job = require("../models/Jobs");
 const Application = require("../models/Application");
 const { buildJobQueryPlan } = require("../utils/queryPlanner");
 const config = require("./config");
+const User = require("../models/User");
+const { embed, isEnabled: ragEnabled } = require("./embeddings");
+const { JOB_VECTOR_INDEX } = require("./vectorIndex");
 
 const isId = (id) => mongoose.Types.ObjectId.isValid(id);
 
@@ -17,6 +20,80 @@ const formatSalary = (s) =>
   s?.isDisclosed
     ? { min: s.min, max: s.max, currency: s.currency, period: s.period }
     : "Not disclosed";
+
+/** Shape every job list the same way, whichever search produced it. */
+const toJobSummary = (j, company) => ({
+  id: String(j._id),
+  title: j.title,
+  company,
+  location: formatLocation(j.location),
+  workMode: j.workMode,
+  employmentType: j.employmentType,
+  experienceYears: j.experience,
+  salary: formatSalary(j.salary),
+  skills: j.skills,
+});
+
+const RAG_OFF = { error: "Semantic search is not configured on this server; use search_jobs instead." };
+
+/** RAG retrieval: nearest jobs by meaning, via Atlas Vector Search. */
+const vectorSearchJobs = async (vector, { workMode, limit } = {}) => {
+  const filter = { status: "ACTIVE" };
+  if (workMode?.length) filter.workMode = { $in: workMode };
+  const n = Math.min(Math.max(limit || 5, 1), config.maxRows);
+
+  const jobs = await Job.aggregate([
+    {
+      $vectorSearch: {
+        index: JOB_VECTOR_INDEX,
+        path: "embedding",
+        queryVector: vector,
+        numCandidates: Math.max(100, n * 20), // search wide, return the best n
+        limit: n,
+        filter,
+      },
+    },
+    {
+      $project: {
+        title: 1, company: 1, location: 1, workMode: 1, employmentType: 1,
+        experience: 1, salary: 1, skills: 1,
+        score: { $meta: "vectorSearchScore" },
+      },
+    },
+    {
+      $lookup: {
+        from: "companies",
+        localField: "company",
+        foreignField: "_id",
+        as: "company",
+        pipeline: [{ $project: { name: 1 } }],
+      },
+    },
+  ]);
+
+  return jobs.map((j) => ({
+    ...toJobSummary(j, j.company[0]?.name),
+    // 0-1: how close the job's meaning is to the query (higher = better).
+    matchScore: Math.round(j.score * 100) / 100,
+  }));
+};
+
+/** The candidate's profile as text, for "match jobs to me". */
+const profileToText = (user) =>
+  [
+    user.headline && `Headline: ${user.headline}`,
+    user.skills?.length && `Skills: ${user.skills.join(", ")}`,
+    user.totalExperience &&
+      (user.totalExperience.years || user.totalExperience.months) &&
+      `Experience: ${user.totalExperience.years} years ${user.totalExperience.months} months`,
+    ...(user.experience ?? []).map(
+      (e) => `Worked as ${e.designation ?? "?"} at ${e.company ?? "?"}. ${e.description ?? ""}`,
+    ),
+    user.bio && `About: ${user.bio}`,
+  ]
+    .filter(Boolean)
+    .join("\n")
+    .slice(0, 6000);
 
 // ---- What the model sees (Anthropic tool format) ---------------------------
 const definitions = [
@@ -53,6 +130,44 @@ const definitions = [
           type: "integer",
           description: "Max results, default 5",
         },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "semantic_search_jobs",
+    description:
+      "Search jobs by MEANING, not exact words (RAG over job embeddings). Use for " +
+      "descriptive or vague requests, e.g. 'frontend roles for someone who knows React' " +
+      "or 'jobs building dashboards for hospitals'. Use search_jobs instead for exact " +
+      "filters like location, employment type or experience band.",
+    input_schema: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "What the user is looking for, in natural language",
+        },
+        workMode: {
+          type: "array",
+          items: { type: "string", enum: ["REMOTE", "HYBRID", "ONSITE"] },
+        },
+        limit: { type: "integer", description: "Max results, default 5" },
+      },
+      required: ["query"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "match_jobs_to_my_profile",
+    description:
+      "Find the jobs that best match the current user's own profile (headline, " +
+      "skills, experience, bio). Use when the user asks what jobs suit them or " +
+      "wants recommendations.",
+    input_schema: {
+      type: "object",
+      properties: {
+        limit: { type: "integer", description: "Max results, default 5" },
       },
       additionalProperties: false,
     },
@@ -120,17 +235,30 @@ const handlers = {
       .limit(limit)
       .lean();
 
-    return jobs.map((j) => ({
-      id: String(j._id),
-      title: j.title,
-      company: j.company?.name,
-      location: formatLocation(j.location),
-      workMode: j.workMode,
-      employmentType: j.employmentType,
-      experienceYears: j.experience,
-      salary: formatSalary(j.salary),
-      skills: j.skills,
-    }));
+    return jobs.map((j) => toJobSummary(j, j.company?.name));
+  },
+
+  async semantic_search_jobs({ query, workMode, limit }) {
+    if (!ragEnabled()) return RAG_OFF;
+    if (!query?.trim()) return { error: "query is required" };
+    const [vector] = await embed([query.slice(0, 2000)], "query");
+    return vectorSearchJobs(vector, { workMode, limit });
+  },
+
+  async match_jobs_to_my_profile({ limit }, { userId }) {
+    if (!ragEnabled()) return RAG_OFF;
+    const user = await User.findById(userId)
+      .select("headline bio skills totalExperience experience")
+      .lean();
+    const profile = user ? profileToText(user) : "";
+    if (!profile) {
+      return {
+        error:
+          "The user's profile has no headline, skills or experience yet. Ask them to complete their profile first.",
+      };
+    }
+    const [vector] = await embed([profile], "query");
+    return vectorSearchJobs(vector, { limit });
   },
 
   async get_job_details({ jobId }) {
@@ -194,4 +322,4 @@ const handlers = {
   },
 };
 
-module.exports = { definitions, handlers };
+module.exports = { definitions, handlers, profileToText };
