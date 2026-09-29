@@ -7,6 +7,7 @@ const authRoutes = require("./routes/authRoutes");
 const companyRoutes = require("./routes/companyRoutes");
 const jobRoutes = require("./routes/jobRoutes");
 const swaggerUi = require("swagger-ui-express");
+const agentRoutes = require("./routes/agentRoutes");
 const openapiSpec = require("./docs/openapi.json");
 const applicationRoutes = require("./routes/applicationRoutes");
 const errorMiddleware = require("./middleware/errorMiddleware");
@@ -71,6 +72,7 @@ app.use("/api/company", companyRoutes);
 app.use("/api/jobs", jobRoutes);
 app.use("/api/applications", applicationRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/agent", agentRoutes);
 
 app.use(notFound);
 app.use(errorMiddleware);

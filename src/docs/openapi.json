@@ -382,6 +382,69 @@
             }
           }
         }
+      },
+      "AgentMessage": {
+        "type": "object",
+        "required": [
+          "role",
+          "content"
+        ],
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "user",
+              "assistant"
+            ]
+          },
+          "content": {
+            "type": "string",
+            "maxLength": 2000
+          }
+        }
+      },
+      "AgentProposal": {
+        "type": "object",
+        "description": "A job the agent suggests applying to. The agent never applies itself; the client confirms by calling POST /applications.",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "apply"
+            ]
+          },
+          "jobId": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "company": {
+            "type": "string",
+            "nullable": true
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "screeningQuestions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "question": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string"
+                },
+                "required": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        }
       }
     }
   },
@@ -409,6 +472,10 @@
     {
       "name": "Notifications",
       "description": "In-app notifications for candidates"
+    },
+    {
+      "name": "AI Assistant",
+      "description": "Agentic AI job assistant (OpenAI tool calling). Candidates only."
     }
   ],
   "paths": {
@@ -2022,6 +2089,93 @@
           },
           "404": {
             "description": "Notification not found"
+          }
+        }
+      }
+    },
+    "/agent/chat": {
+      "post": {
+        "tags": [
+          "AI Assistant"
+        ],
+        "summary": "Chat with the AI job assistant (USER)",
+        "description": "Runs an agent loop: the model can call tools (search_jobs, get_job_details, get_my_applications, propose_application) against the database before replying. Stateless: send the whole conversation each time; the last message must be from the user. Max 20 messages (2000 chars each) are used. Rate-limited to 10 requests/minute per user.",
+        "security": [
+          {
+            "cookieAuth": [],
+            "csrfToken": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "messages"
+                ],
+                "properties": {
+                  "messages": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/AgentMessage"
+                    }
+                  }
+                }
+              },
+              "example": {
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": "Find remote Angular jobs for 2 years experience"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Assistant reply",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "example": "Assistant reply"
+                    },
+                    "reply": {
+                      "type": "string",
+                      "example": "Here are 3 remote Angular roles that fit 2 years of experience: ..."
+                    },
+                    "proposals": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/AgentProposal"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "No messages, or the last message is not from the user"
+          },
+          "401": {
+            "description": "Not logged in"
+          },
+          "403": {
+            "description": "Not a USER account, or missing/invalid CSRF token"
+          },
+          "429": {
+            "description": "Too many assistant requests"
+          },
+          "503": {
+            "description": "OPENAI_API_KEY not configured on the server"
           }
         }
       }
