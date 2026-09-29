@@ -46,12 +46,22 @@ const chatWithAgent = async (req, res, next) => {
   } catch (error) {
     // Provider errors are ours to handle, not a generic 500 for the user.
     if (error instanceof APIError) {
-      console.error("[agent] Anthropic error:", error.status, error.message);
-      const misconfigured = error.status === 401 || error.status === 403;
+      // error.error.error.message is Anthropic's own explanation, e.g.
+      // "Your credit balance is too low..." or "model: ... not found".
+      const detail = error.error?.error?.message || error.message;
+      console.error("[agent] Anthropic error:", error.status ?? "network", detail);
+
+      const misconfigured = [400, 401, 403, 404].includes(error.status);
+      const message = misconfigured
+        ? "AI assistant is not configured correctly"
+        : "The AI assistant is busy right now. Please try again in a moment.";
+
       return res.status(misconfigured ? 503 : 502).json({
-        message: misconfigured
-          ? "AI assistant is not configured correctly"
-          : "The AI assistant is busy right now. Please try again in a moment.",
+        // Show the real reason while developing; keep it generic in production.
+        message:
+          process.env.NODE_ENV === "development"
+            ? `${message} (${error.status ?? "network error"}: ${detail})`
+            : message,
       });
     }
     next(error);

@@ -6,6 +6,10 @@ const config = require("./config");
 
 const isId = (id) => mongoose.Types.ObjectId.isValid(id);
 
+// Tells the model exactly how to recover instead of guessing again.
+const INVALID_ID =
+  "Invalid job id. Real ids only come from search_jobs results - call search_jobs, then use the id from its result.";
+
 const formatLocation = (loc = {}) =>
   [loc.city, loc.state, loc.country].filter(Boolean).join(", ");
 
@@ -130,7 +134,7 @@ const handlers = {
   },
 
   async get_job_details({ jobId }) {
-    if (!isId(jobId)) return { error: "Invalid job id" };
+    if (!isId(jobId)) return { error: INVALID_ID };
     const job = await Job.findOne({ _id: jobId, status: "ACTIVE" })
       .select("-postedBy -viewCount -slug -__v")
       .populate("company", "name industry size about website")
@@ -163,7 +167,7 @@ const handlers = {
   },
 
   async propose_application({ jobId, reason }, { userId, proposals }) {
-    if (!isId(jobId)) return { error: "Invalid job id" };
+    if (!isId(jobId)) return { error: INVALID_ID };
     const job = await Job.findOne({ _id: jobId, status: "ACTIVE" })
       .select("title company screeningQuestions")
       .populate("company", "name")

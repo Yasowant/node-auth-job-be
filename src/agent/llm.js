@@ -16,6 +16,10 @@ const getClient = () => {
     apiKey: process.env.ANTHROPIC_API_KEY,
     timeout: config.timeoutMs,
     maxRetries: config.retries,
+    // Keys not scoped to a workspace are rejected (400) without this header.
+    ...(config.workspaceId
+      ? { defaultHeaders: { "anthropic-workspace-id": config.workspaceId } }
+      : {}),
   });
   return client;
 };

@@ -212,7 +212,7 @@ describe("POST /api/agent/chat", () => {
       .send(userMessage("details of job not-an-id"));
 
     expect(res.status).toBe(200);
-    expect(toolResultOf(1)).toEqual({ error: "Invalid job id" });
+    expect(toolResultOf(1).error).toMatch(/Invalid job id/);
     expect(chat.mock.calls[1][0].messages.at(-1).content[0].is_error).toBe(true);
   });
 
